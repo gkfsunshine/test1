@@ -1,0 +1,348 @@
+<?php
+namespace App\Logic\Api;
+
+use App\Exceptions\ApiException;
+
+class RegisterLogic
+{
+
+    /**
+     * 提交注册用户
+     * @param array $data 要注册的用户数据
+     * @return bool
+     * @throws ApiException
+     */
+    public static function validAccountCode($data)
+    {
+        //判断当前登录状态
+        if (!empty(\Jwt::get('user_info.user_id'))) {
+            throw new ApiException('请退出登录状态再操作!');
+        }
+
+        // 显示提示文字
+        $typetext = '';
+        if (isset($data['phone'])) {
+            $typetext = '手机号码';
+            $type = 'phone';
+        } elseif (isset($data['email'])) {
+            $typetext = '邮箱';
+            $type = 'email';
+        } else {
+            throw new ApiException('错误的类型!');
+        }
+
+        //判读验证码是否正确
+        if ($type == 'phone') {
+            \Sms::checkCaptcha('register_code', $data['phone'], $data['verification_code']);
+            \Sms::deleteCaptcha('register_code');
+
+            //返回下一步token
+            $token = str_random(16);
+            \Jwt::set('sms_check.register_token', array(
+                'phone' => $data['phone'],
+                'msgcode' => $token,
+                'expires_time' => time() + 60 * 10   //10分钟有效期
+            ));
+        } else if ($type == 'email') {
+            $verfy_data = array('email' => $data['email']);
+            \JiaLeo\Laravel\Captcha\Custom::checkCaptcha('email_check:register_code', $data['verification_code'], $verfy_data);
+            \JiaLeo\Laravel\Captcha\Custom::deleteCaptcha('email_check:register_code');
+            //返回下一步token
+            $token = str_random(16);
+            \Jwt::set('email_check.register_token', array(
+                'email' => $data['email'],
+                'msgcode' => $token,
+                'expires_time' => time() + 60 * 10   //10分钟有效期
+            ));
+        } else {
+            throw new ApiException('错误的类型!');
+        }
+
+        return ['register_token' => $token];
+    }
+
+    /**
+     * 提交注册用户
+     * @param array $data 要注册的用户数据
+     * @return bool
+     * @throws ApiException
+     */
+    public static function addUser($data, $type = 'phone')
+    {
+        //判断当前登录状态
+        if (!empty(\Jwt::get('user_info.user_id'))) {
+            throw new ApiException('请退出登录状态再操作!');
+        }
+
+        //保存到数据库的数据
+        $save_data = array();
+
+        if ($type == 'phone') {
+            $typetext = '手机号码';
+            //判读token是否正确
+            $code = \Jwt::get('sms_check.register_token');
+            if (empty($code)) {
+                throw new ApiException('请重新验证手机!');
+            }
+
+            if ($code['phone'] != $data['phone']) {
+                throw new ApiException('请重新验证手机!');
+            }
+
+        } elseif ($type == 'email') {
+            $typetext = '邮箱';
+
+            //判读token是否正确
+            $code = \Jwt::get('email_check.register_token');
+            if (empty($code)) {
+                throw new ApiException('请重新验证邮箱!');
+            }
+
+            if ($code['email'] != $data['email']) {
+                throw new ApiException('请重新验证邮箱!');
+            }
+        } else {
+            throw new ApiException('数据错误!');
+        }
+
+        //验证code
+        if ($code['msgcode'] != $data['verification_code']) {
+            throw new ApiException('验证失败!');
+        }
+
+        //验证是否过期
+        if ($code['expires_time'] < time()) {
+            throw new ApiException('验证已过期,请重新验证!');
+        }
+
+        //判断唯一电话号码或邮箱
+        $user = \App\Model\UserModel::where('is_on', '=', 1);
+
+        if ($type == 'phone') {
+            $user->where('phone', '=', $data['phone']);
+            $save_data['phone'] = $data['phone'];
+        } elseif ($type == 'email') {
+            $user->where('email', '=', $data['email']);
+            $save_data['email'] = $data['email'];
+        }
+
+        $user = $user->first(['id']);
+        if ($user) {
+            throw new ApiException($typetext . '已经被注册!');
+        }
+
+        //密码加密
+        load_helper('Password');
+        $get_password = create_password($data['password'], $salt);
+
+        load_helper('Network');
+        $save_data['last_login_ip'] = get_client_ip();
+        $save_data['last_login_time'] = time();
+        $save_data['register_ip'] = get_client_ip();
+
+        //------判断是否要绑定第三方授权(微信,微博)
+        $oauth_info = \Jwt::get('oauth');
+        $oauth_id = 0;
+        if ($oauth_info && !empty($oauth_info['user_auth_oauth_id']) && !empty($oauth_info['type'])) {
+            //查找数据库
+            $is_oauth = \App\Model\UserAuthOauthModel::select(['id', 'user_id', 'nickname', 'headimg'])
+                ->where('id', $oauth_info['user_auth_oauth_id'])
+                ->first();
+            if ($is_oauth) {
+                if ($is_oauth->user_id == 0) {
+                    $oauth_id = $oauth_info['user_auth_oauth_id'];
+
+                    $save_data['headimg'] = $is_oauth->headimg;
+                    $save_data['username'] = $is_oauth->nickname;
+
+                    switch ($oauth_info['type']) {
+                        case 1 :
+                            $save_data['is_wechat'] = 1;
+                            break;
+                        case 2 :
+                            $save_data['is_qq'] = 1;
+                            break;
+                        case 3 :
+                            $save_data['is_weibo'] = 1;
+                            break;
+                    }
+                }
+            }
+        }
+
+        \DB::beginTransaction();
+        //用户表
+        $user_model = new \App\Model\UserModel();
+        set_save_data($user_model, $save_data);
+        $res = $user_model->save();
+        if (!$res) {
+            \DB::rollBack();
+            throw new ApiException('数据库错误!');
+        }
+
+        $user_id = $user_model->id;
+
+        //用户密码表
+        $user_auth_password_model = new \App\Model\UserAuthPasswordModel();
+        set_save_data($user_auth_password_model, [
+            'user_id' => $user_id,
+            'password' => $get_password,
+            'salt' => $salt
+        ]);
+
+        $res = $user_auth_password_model->save();
+        if (!$res) {
+            \DB::rollBack();
+            throw new ApiException('数据库错误!');
+        }
+
+        //用户资金表
+        $user_capital_model = new \App\Model\UserCapitalModel();
+        set_save_data($user_capital_model, [
+            'user_id' => $user_id
+        ]);
+
+        $res = $user_capital_model->save();
+        if (empty($res)) {
+            \DB::rollBack();
+            throw new ApiException('数据库错误');
+        }
+
+        //第三方授权
+        if ($oauth_id > 0) {
+            $is_update = \App\Model\UserAuthOauthModel::where('id', $oauth_id)
+                ->update(['user_id' => $user_id]);
+            if (!$is_update) {
+                \DB::rollBack();
+                throw new ApiException('数据库错误');
+            }
+
+            \Jwt::delete('oauth');
+        }
+
+        \DB::commit();
+
+
+        // 删除验证码
+        if ($type == 'phone') {
+            \Jwt::delete('sms_check.register_token');
+        } else if ($type == 'email') {
+            \Jwt::delete('email_check.register_token');
+        }
+
+        //写入session
+        \Jwt::set('user_info.user_id', $user_id);
+
+        return true;
+    }
+
+    /**
+     * 通过手机注册发送验证码
+     * @param array $data 要发送验证码的数据
+     * @return bool
+     * @throws ApiException
+     */
+    public static function sendSms($data)
+    {
+        //判断当前登录状态
+        if (!empty(\Jwt::get('user_info.user_id'))) {
+            throw new ApiException('请退出登录状态再操作!');
+        }
+
+        //图形验证码判断
+        /*$result = \Captcha::checkCodeInfo('register_code', $data['captcha_code']);
+        if (!$result) {
+            throw new ApiException('验证码错误!');
+        }*/
+
+        //判断唯一电话号码
+        $user = \App\Model\UserModel::where('phone', '=', $data['phone'])
+            ->where('is_on', '=', 1)
+            ->first(['id']);
+        if ($user) {
+            throw new ApiException('手机号码已经被注册!');
+        }
+
+        \App\Logic\SmsLogic::register($data['phone']);
+
+        return true;
+    }
+
+    /**
+     * 通过邮箱注册发送验证码
+     * @param array $data 要发送验证码的数据
+     * @return bool
+     * @throws ApiException
+     */
+    public static function sendEmail($data)
+    {
+        //判断当前登录状态
+        if (!empty(\Jwt::get('user_info.user_id'))) {
+            throw new ApiException('请退出登录状态再操作!');
+        }
+
+        //图形验证码判断
+        /*$result = \Captcha::checkCodeInfo('register_code', $data['captcha_code']);
+        if (!$result) {
+            throw new ApiException('验证码错误!');
+        }*/
+
+        //判断唯一邮箱
+        $user = \App\Model\UserModel::where('email', '=', $data['email'])
+            ->where('is_on', '=', 1)
+            ->first(['id']);
+        if ($user) {
+            throw new ApiException('邮箱已经被注册!');
+        }
+
+        //发送邮件
+        \App\Logic\EmailLogic::register($data['email']);
+
+        return true;
+    }
+
+    /**
+     * 判断手机号是否存在
+     * @param array $data 要验证的手机号
+     * @return bool
+     * @throws ApiException
+     */
+    public static function validPhone($data)
+    {
+        //判断唯一电话号码
+        $user = \App\Model\UserModel::where('phone', '=', $data['phone'])
+            ->where('is_on', '=', 1)
+            ->first(['id']);
+
+        $return['is_exist'] = true;
+
+        if (empty($user)) {
+            $return['is_exist'] = false;
+        }
+
+        return $return;
+    }
+
+    /**
+     * 判断Email是否存在
+     * @param array $data 要验证的手机号
+     * @return bool
+     * @throws ApiException
+     */
+    public static function validEmail($data)
+    {
+        //判断唯一电话号码
+        $user = \App\Model\UserModel::where('email', '=', $data['email'])
+            ->where('is_on', '=', 1)
+            ->first(['id']);
+
+        $return['is_exist'] = true;
+
+        if (empty($user)) {
+            $return['is_exist'] = false;
+        }
+
+        return $return;
+    }
+
+}

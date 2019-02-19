@@ -1,0 +1,56 @@
+<?php
+namespace App\Model;
+
+use Illuminate\Database\Eloquent\Model;
+
+
+/**
+ * Model AreaModel
+ *
+ * @property int $id
+ * @property string $name
+ * @property int $parent_id
+ * @property int $level
+ * @property string $letter
+ *
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\AreaModel where($column, $operator = null, $value = null, $boolean = 'and')
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\AreaModel whereIn($column, $values, $boolean = 'and', $not = false)
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\AreaModel leftJoin($table, $first, $operator = null, $second = null)
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\AreaModel rightJoin($table, $first, $operator = null, $second = null)
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\AreaModel get($columns = ['*'])
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\AreaModel paginate($perPage = 15, $columns = ['*'], $pageName = 'page', $page = null)
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\AreaModel find($id, $columns = ['*'])
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\AreaModel first($columns = ['*'])
+ *  * @method static \Illuminate\Database\Query\Builder | \App\Model\AreaModel select($columns = ['*'])
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\AreaModel orderBy($column, $direction = 'asc')
+ * @package App\Model
+ */
+class AreaModel extends Model
+{
+    protected $table = 'area';
+
+    //定义为毫秒时间戳
+    protected $dateFormat = 'Uv';
+
+    //不需要记录created_at或updated_at
+    //protected $timestamps = false;
+
+    protected $casts = [
+        'id' => 'string',   //把id返回字符串
+    ];
+
+    /**
+     * 获取对应数据库链接对象
+     * @eg 用于分库分表时获取数据所在的数据库对象
+     * @param $id
+     * @return object
+     */
+    /*public static function getShardingConnection($id)
+    {
+        $mod = $id % 4;
+        $model = '\App\Model\Mysql2\User_'.$mod.'Model';
+
+        return new $model;
+    }*/
+
+}

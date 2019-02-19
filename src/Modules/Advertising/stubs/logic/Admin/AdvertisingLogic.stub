@@ -1,0 +1,202 @@
+<?php
+
+namespace App\Logic\Admin;
+
+use App\Exceptions\ApiException;
+
+class AdvertisingLogic
+{
+
+    /**
+     * 广告列表
+     * @param array $data 列表查询条件
+     * @return \App\Model\AdvertisingModel|array|\Illuminate\Database\Query\Builder
+     */
+    public static function getAdvertisingList($data)
+    {
+        $list = \App\Model\AdvertisingModel::select(['id', 'title', 'cover', 'sort', 'device_platform', 'position', 'is_show', 'link', 'updated_at'])
+            ->orderBy('sort', 'desc')
+            ->where('is_on', 1);
+
+        //筛选平台
+        if (isset($data['device_platform'])) {
+            $list->where('device_platform', $data['device_platform']);
+        }
+
+        //筛选位置
+        if (isset($data['position'])) {
+            $list->where('position', $data['position']);
+        }
+
+        //筛选标题
+        if (isset($data['title'])) {
+            $list->where('title', 'like', '%' . $data['title'] . '%');
+        }
+
+        $list = $list->orderBy('sort', 'asc')->orderBy('created_at', 'desc')->paginate(15);
+
+        load_helper('File');
+
+        $list->each(function ($item) {
+            $item->cover = auto_url($item->cover);
+        });
+
+        return $list;
+    }
+
+    /**
+     * 获取广告详情
+     * @param int $id 广告ID
+     * @return \App\Model\AdvertisingModel|array|\Illuminate\Database\Query\Builder|null|\stdClass
+     * @throws ApiException
+     */
+    public static function getOneAdvertising($id)
+    {
+        $data = \App\Model\AdvertisingModel::where('id', '=', $id)
+            ->where('is_on', '=', 1)
+            ->first(['id', 'title', 'cover', 'sort', 'position', 'device_platform', 'is_show', 'link', 'desc', 'created_at', 'updated_at']);
+        if (empty($data)) {
+            throw new ApiException('数据错误');
+        }
+
+        load_helper('File');
+
+        $data->cover = auto_url($data->cover);
+
+        return $data;
+
+    }
+
+    /**
+     * 添加广告
+     * @param array $data 要添加的广告数据
+     * @return bool
+     * @throws ApiException
+     */
+    public static function addAdvertising($data)
+    {
+        $img_data = \App\Model\UploadModel::where('id', $data['cover'])
+            ->where('is_on', 1)
+            ->first(['path']);
+
+        if (!$img_data) {
+            throw new ApiException('图片不存在');
+        }
+
+        $data['cover'] = $img_data['path'];
+
+        $config = \App\Model\ConfigModel::where('code', 'advertising_position')
+            ->first(['value']);
+        if (!$config || empty($config['value'])) {
+            throw new ApiException('广告位置不存在！');
+        }
+
+        $position = json_decode($config['value'], true);
+        if ($data['device_platform'] == 1) {
+            $position = $position['phone'];
+        } elseif ($data['device_platform'] == 2) {
+            $position = $position['app'];
+        } else {
+            $position = $position['pc'];
+        }
+
+        if (collect($position)->where('id', $data['position'])->isEmpty()) {
+            throw new ApiException('广告位置不存在！');
+        }
+
+        $Advertising_model = new \App\Model\AdvertisingModel();
+        set_save_data($Advertising_model, $data);
+        $res = $Advertising_model->save();
+        if (!$res) {
+            throw new ApiException('数据库错误!');
+        }
+
+        return true;
+    }
+
+    /**
+     * 修改广告信息
+     * @param array $data 修改的信息
+     * @param int $id 广告ID
+     * @return bool
+     * @throws ApiException
+     */
+    public static function updateAdvertising($data, $id)
+    {
+        if (isset($data['cover'])) {
+            $img_data = \App\Model\UploadModel::where('id', $data['cover'])
+                ->where('is_on', 1)
+                ->first(['path']);
+            if (!$img_data) {
+                throw new ApiException('图片不存在');
+            }
+            $data['cover'] = $img_data['path'];
+        }
+
+        //广告是否存在
+        $res = \App\Model\AdvertisingModel::where('is_on', '=', 1)
+            ->select(['id'])
+            ->find($id);
+
+        if (!$res) {
+            throw new ApiException('广告不存在!');
+        }
+
+        set_save_data($res, $data);
+        $update_res = $res->save();
+        if (!$update_res) {
+            throw new ApiException('数据库错误!');
+        }
+
+        return true;
+    }
+
+    /**
+     * 删除广告
+     * @param int $id 广告ID
+     * @return bool
+     * @throws ApiException
+     */
+    public static function deleteAdvertising($id)
+    {
+        //广告是否存在
+        $res = \App\Model\AdvertisingModel::where('is_on', '=', 1)
+            ->select(['id'])
+            ->find($id);
+
+        if (!$res) {
+            throw new ApiException('广告不存在!');
+        }
+
+        set_save_data($res, ['is_on' => 0]);
+        $update_res = $res->save();
+        if (!$update_res) {
+            throw new ApiException('数据库错误!');
+        }
+
+        return true;
+    }
+
+    /**
+     * 获取广告位置配置
+     * @param $data
+     * @return mixed
+     * @throws ApiException
+     */
+    public static function getAddvertisingConfig($data)
+    {
+        $config = \App\Model\ConfigModel::where('code', 'advertising_position')
+            ->first(['value']);
+
+        if (!$data) {
+            throw new ApiException('广告位置信息不存在！');
+        }
+
+        $advertising_position = $config['value'];
+
+        $advertising_position = json_decode($advertising_position, true)[$data['position']];
+
+        return $advertising_position;
+    }
+
+}

@@ -1,0 +1,179 @@
+<?php
+namespace App\Logic\Admin;
+
+use App\Exceptions\ApiException;
+use Illuminate\Support\Facades\Redis;
+
+class AdminMenuLogic
+{
+
+    /**
+     * 管理员菜单列表
+     * @return array
+     */
+    public static function getAdminMenuList($data)
+    {
+
+        $list = \App\Model\AdminMenuModel::where('is_on', '=', 1)
+            ->select(['id', 'name', 'order', 'url', 'icon', 'level', 'parent_id', 'description', 'order'])
+            ->orderBy('order');
+
+        $res = array();
+
+        if (isset($data['menu_id'])) {
+            $res = \App\Model\AdminMenuModel::where('is_on', '=', 1)
+                ->select(['id', 'name'])
+                ->find($data['menu_id']);
+
+            $list = $list->where('parent_id', '=', $data['menu_id'])
+                ->paginate(15);
+        } else {
+            $list = $list->where('parent_id', '=', 0)
+                ->with(['childs' => function($query){
+                    $query->where('is_on',1)->select(['id','parent_id']);
+                }])
+                ->paginate(15);
+
+            $list->each(function($item){
+                if($item->childs->isEmpty()){
+                    $item->is_childs = 0;
+                }else{
+                    $item->is_childs = 1;
+                }
+                unset($item->childs);
+            });
+        }
+
+        return [
+            'data' => $res,
+            'list' => $list
+        ];
+    }
+
+
+    /**
+     * 获取一条管理员菜单数据
+     * @param int $id 菜单ID
+     * @return \App\Model\AdminMenuModel|array|\Illuminate\Database\Query\Builder|null|\stdClass
+     * @throws ApiException
+     */
+    public static function getOneAdminMenu($id)
+    {
+        $data = \App\Model\AdminMenuModel::where('is_on', '=', 1)
+            ->select(['id', 'name', 'url', 'icon', 'level', 'parent_id', 'description', 'order'])
+            ->find($id);
+
+        if (!$data) {
+            throw new ApiException('菜单不存在!');
+        }
+        return $data;
+    }
+
+    /**
+     * 添加管理员菜单
+     * @param array $data 要添加的数据
+     * @return bool
+     * @throws ApiException
+     */
+    public static function addAdminMenu($data)
+    {
+        $admin_menu_model = new \App\Model\AdminMenuModel();
+        set_save_data($admin_menu_model, $data);
+        $res = $admin_menu_model->save();
+        if (!$res) {
+            throw new ApiException('数据库错误!');
+        }
+        return true;
+    }
+
+    /**
+     * 修改管理员菜单
+     * @param array $data 要修改的数据
+     * @param int $id 菜单ID
+     * @return bool
+     * @throws ApiException
+     */
+    public static function updateAdminMenu($data, $id)
+    {
+        $res = \App\Model\AdminMenuModel::where('is_on', '=', 1)
+            ->select(['id', 'name', 'url', 'icon', 'level', 'parent_id', 'description', 'order'])
+            ->find($id);
+
+        if (!$res) {
+            throw new ApiException('菜单不存在!');
+        }
+
+        set_save_data($res, $data);
+        $update = $res->save();
+        if (!$update) {
+            throw new ApiException('数据库错误!');
+        }
+
+        return true;
+    }
+
+    /**
+     * 删除管理员菜单
+     * @param int $id 菜单ID
+     * @return bool
+     * @throws ApiException
+     */
+    public static function deleteAdminMenu($id)
+    {
+        $res = \App\Model\AdminMenuModel::where('is_on', '=', 1)
+            ->select(['id', 'level'])
+            ->find($id);
+
+        if (!$res) {
+            throw new ApiException('菜单不存在!');
+        }
+
+        \DB::beginTransaction();
+        if (!empty($res->level) && $res->level == 1) {
+            //查询子级
+           $child_menu = \App\Model\AdminMenuModel::where('parent_id', '=', $id)
+                ->where('is_on', 1)
+                ->get(['id']);
+
+            $child_arr = $child_menu->pluck('id')->toArray();
+
+            if($child_arr){
+
+                \DB::rollBack();
+                throw new ApiException('请删除子菜单后再操作!');
+
+               /* $update_child = \App\Model\AdminMenuModel::whereIn('id', $child_arr)
+                    ->update(['is_on' => 0]);
+
+               if (!$update_child) {
+                    \DB::rollBack();
+                    throw new ApiException('数据库错误!');
+               }*/
+            }
+
+            //删除权限菜单表中的
+            $permission_menu = \App\Model\AdminPermissionMenuModel::whereIn('admin_menu_id', $child_arr)
+                ->first(['id']);
+
+            if ($permission_menu) {
+                $delete_permission_menu = \App\Model\AdminPermissionMenuModel::whereIn('admin_menu_id', $child_arr)->delete();
+                if (!$delete_permission_menu) {
+                    \DB::rollBack();
+                    throw new ApiException('数据库错误!');
+                }
+            }
+        }
+
+        set_save_data($res, ['is_on' => 0]);
+        $update = $res->save();
+
+        if (!$update) {
+            \DB::rollBack();
+            throw new ApiException('数据库错误!');
+        }
+
+        \DB::commit();
+        return true;
+    }
+
+}

@@ -1,0 +1,186 @@
+<?php
+
+namespace App\Logic\Admin;
+
+use App\Exceptions\ApiException;
+
+class VersionLogic
+{
+
+    /**
+     * 列表
+     * @param array $data 列表查询条件
+     *              $data.
+     * @return
+     */
+    public static function getVersionList($data)
+    {
+        $list = \App\Model\VersionModel::select(['id', 'type', 'version', 'version_num', 'download_url', 'is_coerce', 'is_remind', 'is_external', 'created_at'])
+            ->where('is_on', 1);
+
+        //筛选
+        if (isset($data['type'])) {
+            $list->where('type', $data['type']);
+        }
+
+        $list = $list->paginate(15);
+
+        load_helper('File');
+        $list->each(function ($item) {
+            if ($item->is_external != 1) {
+                $item->download_url = auto_url($item->download_url);
+            }
+        });
+
+        return $list;
+    }
+
+    /**
+     * 获取详情
+     * @param int $id ID
+     * @return
+     * @throws ApiException
+     */
+    public static function getOneVersion($id)
+    {
+        $data = \App\Model\VersionModel::where('is_on', 1)
+            ->select(['id', 'type', 'version', 'version_num', 'download_url', 'is_coerce', 'is_remind', 'is_external', 'content'])
+            ->find($id);
+
+        if (!$data) {
+            throw new ApiException('版本不存在!');
+        }
+
+        load_helper('File');
+        if ($data->is_external != 1) {
+            $data->download_url = auto_url($data->download_url);
+        }
+
+        return $data;
+    }
+
+    /**
+     * 添加
+     * @param array $data 要添加的数据
+     * @return bool
+     * @throws ApiException
+     */
+    public static function addVersion($data)
+    {
+        if (isset($data['upload_id']) && $data['is_external'] != 1 && $data['type'] == 2) {
+            $upload = \App\Model\UploadModel::where('id', $data['upload_id'])
+                ->where('is_on', 1)
+                ->first(['path']);
+
+            $data['download_url'] = $upload['path'];
+            unset($data['upload_id']);
+        }
+
+        $version_model = new \App\Model\VersionModel();
+        set_save_data($version_model, $data);
+        $res = $version_model->save();
+        if (!$res) {
+            throw new ApiException('数据库错误!');
+        }
+
+        return true;
+    }
+
+    /**
+     * 修改信息
+     * @param array $data 修改的信息
+     * @param int $id ID
+     * @return bool
+     * @throws ApiException
+     */
+    public static function updateVersion($data, $id)
+    {
+        //是否存在
+        $res = \App\Model\VersionModel::where('is_on', 1)
+            ->select(['id', 'type', 'is_external'])
+            ->find($id);
+
+        if (!$res) {
+            throw new ApiException('版本不存在!');
+        }
+
+        if (isset($data['upload_id']) && ((isset($data['is_external']) && $data['is_external'] != 1) || $res->is_external != 1) && ((isset($data['type']) && $data['type'] == 2) || $res->type == 2)) {
+            $upload = \App\Model\UploadModel::where('id', $data['upload_id'])
+                ->where('is_on', 1)
+                ->first(['path']);
+
+            $data['download_url'] = $upload['path'];
+            unset($data['upload_id']);
+        }
+
+        set_save_data($res, $data);
+        $update = $res->save();
+        if (!$update) {
+            throw new ApiException('数据库错误!');
+        }
+
+        return true;
+    }
+
+    /**
+     * 删除
+     * @param int $id ID
+     * @return bool
+     * @throws ApiException
+     */
+    public static function deleteVersion($id)
+    {
+        $res = \App\Model\VersionModel::where('is_on', 1)
+            ->select(['id'])
+            ->find($id);
+
+        if (!$res) {
+            throw new ApiException('版本不存在');
+        }
+
+        set_save_data($res, ['is_on' => 0]);
+        $update = $res->save();
+
+        if (!$update) {
+            throw new ApiException('数据库错误!');
+        }
+
+        return true;
+    }
+
+    /**
+     * 获取APP介绍说明
+     * @return array
+     */
+    public static function getAppInstructions()
+    {
+        $config = \App\Model\ConfigModel::where('code', 'app_instructions')
+            ->first(['value']);
+
+        return ['app_instructions' => $config['value']];
+    }
+
+    /**
+     * 保存APP介绍说明
+     * @return array
+     */
+    public static function postAppInstructions($data)
+    {
+        $config = \App\Model\ConfigModel::where('code', 'app_instructions')
+            ->first(['value']);
+
+        if (!$config) {
+            throw new ApiException('APP介绍不存在！');
+        }
+
+        $res = \App\Model\ConfigModel::where('code', 'app_instructions')
+            ->update(['value' => $data['app_instructions']]);
+
+        if (!$res) {
+            throw new ApiException('数据库错误！');
+        }
+
+        return true;
+    }
+
+}

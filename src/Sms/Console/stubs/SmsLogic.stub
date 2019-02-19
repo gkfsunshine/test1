@@ -1,0 +1,141 @@
+<?php
+namespace App\Logic;
+
+use App\Exceptions\ApiException;
+
+class SmsLogic
+{
+
+    /**
+     * 注册逻辑
+     * @return bool
+     */
+    public static function register($phone)
+    {
+        $result = \Sms::setcode()->send($phone, 1, array(
+                'product' => '汉子科技')
+        );
+
+        if ($result == true) {
+            \Sms::setCaptcha('register_code', $phone);
+        } else {
+            throw new ApiException(\Sms::getErrorMsg());
+        }
+
+        return $result;
+    }
+
+    /**
+     * 登录
+     * @return bool
+     */
+    public static function login($phone)
+    {
+        $result = \Sms::setcode()->send($phone, 2);
+
+        if ($result == true) {
+            \Sms::setCaptcha('login_code', $phone);
+        } else {
+            throw new ApiException(\Sms::getErrorMsg());
+        }
+
+        return $result;
+    }
+
+    /**
+     * 修改手机
+     * @return bool
+     */
+    public static function editPhone($phone)
+    {
+        $result = \Sms::setcode()->send($phone, 4);
+        if ($result == true) {
+            \Sms::setCaptcha('edit_code', $phone);
+        } else {
+            throw new ApiException(\Sms::getErrorMsg());
+        }
+
+        return $result;
+    }
+
+    /**
+     * 修改密码
+     * @return bool
+     */
+    public static function editPassword($phone)
+    {
+        $result = \Sms::setcode()->send($phone, 3);
+        if ($result == true) {
+            \Sms::setCaptcha('pwd_code', $phone);
+        } else {
+            throw new ApiException(\Sms::getErrorMsg());
+        }
+
+        return $result;
+    }
+
+    /**
+     * 修改交易密码
+     * @return bool
+     */
+    public static function editPayPassword($phone)
+    {
+        $result = \Sms::setcode()->send($phone, 6);
+        if ($result == true) {
+            \Sms::setCaptcha('pay_password_code', $phone);
+        } else {
+            throw new ApiException(\Sms::getErrorMsg());
+        }
+
+        return $result;
+    }
+
+    /**
+     * 找回密码
+     * @return bool
+     */
+    public static function forgetPassword($phone)
+    {
+        $result = \Sms::setcode()->send($phone, 5);
+        if ($result == true) {
+            \Sms::setCaptcha('forget_password_code', $phone);
+        } else {
+            throw new ApiException(\Sms::getErrorMsg());
+        }
+
+        return $result;
+    }
+
+    /**
+     * 修改手机新手机发送验证码
+     * @return bool
+     */
+    public static function newPhone($phone)
+    {
+        $result = \Sms::setcode()->send($phone, 4);
+        if ($result == true) {
+            \Sms::setCaptcha('new_password_code', $phone);
+        } else {
+            throw new ApiException(\Sms::getErrorMsg());
+        }
+
+        return $result;
+    }
+
+    /**
+     * 绑定手机发送验证码
+     * @return bool
+     */
+    public static function addPhone($phone)
+    {
+        $result = \Sms::setcode()->send($phone, 7);
+        if ($result == true) {
+            \Sms::setCaptcha('add_phone_code', $phone);
+        } else {
+            throw new ApiException(\Sms::getErrorMsg());
+        }
+
+        return $result;
+    }
+
+}

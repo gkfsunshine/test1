@@ -1,0 +1,110 @@
+<?php
+namespace App\Logic\Api;
+
+use App\Exceptions\ApiException;
+
+class ArticleLogic
+{
+
+    /**
+     * 文章列表
+     * @param array $data 列表查询条件
+     *              $data.cat_id 分类id
+     *              $data.article_tag 标签id,逗号分隔
+     *              $data.title 标题
+     *              $data.author 作者
+     * @return \App\Model\ArticleModel|array|\Illuminate\Database\Query\Builder
+     */
+    public static function getArticleList($data)
+    {
+        $list = \App\Model\ArticleModel::select(['id', 'title', 'author', 'cover', 'cat_id', 'created_at', 'updated_at'])
+            ->where('is_on', 1)
+            ->with(['category' => function ($query) {
+                $query->where('is_on', 1)->select('id', 'name');
+            }])
+            ->with(['tags' => function ($query) use ($data) {
+                $query->where('is_on', 1)->select('name');
+            }]);
+
+        //筛选tag
+        if (isset($data['article_tag'])) {
+            $tags = explode(',', $data['article_tag']);
+            $list->whereHas('tags',function($query)use($tags){
+                $query->whereIn('tag_id',$tags);
+            });
+        }
+
+        //筛选分类
+        if (isset($data['cat_id'])) {
+            $list->where('cat_id', $data['cat_id']);
+        }
+
+        //筛选作者
+        if (isset($data['author'])) {
+            $list->where('author', $data['author']);
+        }
+
+        //筛选标题
+        if (isset($data['title'])) {
+            $list->where('title', 'like', '%' . $data['title'] . '%');
+        }
+
+        $list = $list->paginate(15);
+
+        load_helper('File');
+
+        //重装数据
+        $list->each(function ($item, $key) {
+            $item->tags_name = $item->tags->implode('name', ',');
+            $item->cat_name = $item->category->name;
+            $item->cover = auto_url($item->cover);
+            unset($item->tags);
+            unset($item->category);
+        });
+
+        return $list;
+    }
+
+    /**
+     * 获取文章详情
+     * @param int $id 文章ID
+     * @return \App\Model\ArticleModel|array|\Illuminate\Database\Query\Builder|null|\stdClass
+     * @throws ApiException
+     */
+    public static function getOneArticle($id)
+    {
+        $data = \App\Model\ArticleModel::where('is_on', '=', 1)
+            ->select(['id', 'title', 'author', 'cover', 'click_num', 'cat_id', 'content', 'created_at', 'updated_at'])
+            ->find($id);
+
+        if (!$data) {
+            throw new ApiException('文章不存在!');
+        }
+
+        $tags = $data->tags()->get(['article_tag.id', 'name']);
+        if (!$tags->isEmpty()) {
+            $tags->each(function ($item) {
+                unset($item->pivot);
+            });
+            $data->tag = $tags;
+        } else {
+            $data->tag = [];
+        }
+
+        //分类
+        $category=$data->category()->first(['article_category.id', 'name']);
+        if ($category) {
+            $data->cat_name = $category->name;
+        } else {
+            $data->cat_name = '';
+        }
+
+        load_helper('File');
+        $data->cover = auto_url($data->cover);
+
+        //增加点击数
+        $data->increment('click_num',1);
+
+        return $data;
+    }
+}

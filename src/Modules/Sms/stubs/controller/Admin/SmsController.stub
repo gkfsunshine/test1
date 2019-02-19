@@ -1,0 +1,34 @@
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+
+class SmsController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function index()
+    {
+        $this->verify([
+            'user_id' => 'egnum|no_required',
+            'type' => 'in:1:2:3:4:5:6:7:8|no_required',
+            'start_time' => 'num|no_required',
+            'end_time' => 'num|no_required',
+            'phone' => 'no_required'
+        ], 'GET');
+        $list = \App\Logic\Admin\SmsLogic::getSmsList($this->verifyData);
+        return $this->responseList($list);
+    }
+
+
+    public function getSmsType()
+    {
+        $list = \App\Logic\Admin\SmsLogic::getSmsType();
+        return $this->responseList($list);
+    }
+}

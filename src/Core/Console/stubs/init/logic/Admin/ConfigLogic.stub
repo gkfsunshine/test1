@@ -1,0 +1,52 @@
+<?php
+namespace App\Logic\Admin;
+
+use App\Exceptions\ApiException;
+
+class ConfigLogic
+{
+
+    /**
+     * 列表
+     * @param array $data 列表查询条件
+     *              $data.
+     * @return
+     */
+    public static function getConfigList()
+    {
+        $list = \App\Model\ConfigModel::select(['id','code','desc','value','unit'])
+            ->where('is_on', 1)
+            ->where('is_show',1)
+            ->paginate(15);
+
+        return $list;
+    }
+
+    /**
+     * 修改信息
+     * @param array $data 修改的信息
+     * @param int $id ID
+     * @return bool
+     * @throws ApiException
+     */
+    public static function updateConfig($data, $id)
+    {
+        //是否存在
+        $res = \App\Model\ConfigModel::where('is_on', 1)
+            ->select(['id'])
+            ->find($id);
+
+        if (!$res) {
+            throw new ApiException('配置信息不存在!');
+        }
+
+        set_save_data($res, $data);
+        $update = $res->save();
+        if (!$update) {
+            throw new ApiException('数据库错误!');
+        }
+
+        return true;
+    }
+
+}

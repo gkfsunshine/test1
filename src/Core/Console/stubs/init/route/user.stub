@@ -1,0 +1,130 @@
+<?php
+
+/*
+|--------------------------------------------------------------------------
+| User Routes
+|--------------------------------------------------------------------------
+|
+| Here is where you can register API routes for your application. These
+| routes are loaded by the RouteServiceProvider within a group which
+| is assigned the "api" middleware group. Enjoy building your API!
+|
+*/
+
+//需要验证session的
+Route::group(['middleware' => ['JwtAuth']], function () {
+
+    //是否登录
+    Route::get('status', 'Api\LoginController@status');
+
+    //退出登录
+    Route::delete('logins', 'Api\LoginController@logout');
+
+    /*--- 注册 ---*/
+    //手机注册发送验证码
+    Route::post('register/sms', 'Api\RegisterController@sendSms');
+    //邮箱注册发送验证码
+    Route::post('register/send/emails', 'Api\RegisterController@sendEmail');
+    //验证验证码
+    Route::post('register/validcodes', 'Api\RegisterController@validAccountCode');
+    //手机注册操作
+    Route::post('register/phones', 'Api\RegisterController@registerByPhone');
+    //邮箱注册操作
+    Route::post('register/emails', 'Api\RegisterController@registerByEmail');
+    //注册图片验证码
+    Route::get('register/captchas', 'Api\RegisterController@captcha');
+    //注册时验证手机是否已存在
+    Route::get('register/phone/verifications', 'Api\RegisterController@validPhone');
+    //注册时验证Email是否已存在
+    Route::get('register/email/verifications', 'Api\RegisterController@validPhone');
+
+    /*--- 登录 ---*/
+    //手机/邮箱-密码/验证码登录
+    Route::post('logins', 'Api\LoginController@login');
+    //手机验证码登录发送验证码
+    Route::post('login/sms', 'Api\LoginController@sendSms');
+    //邮箱验证码登录发送验证码
+    Route::post('login/emails', 'Api\LoginController@sendEmail');
+    //注册图片验证码
+    Route::get('login/captchas', 'Api\LoginController@lockedCaptcha');
+
+    /*--- 忘记密码 ---*/
+    //忘记密码发短信前的验证码图片
+    Route::get('user/forget/password/captchas', 'Api\UserController@forgetPasswordCaptcha');
+    //忘记密码-验证绑定手机
+    Route::post('user/forget/password/sms', 'Api\UserController@sendForgetPasswordSms');
+    //忘记密码-验证绑定邮箱
+    Route::post('user/forget/password/emails', 'Api\UserController@sendForgetPasswordEmail');
+    //提交找回密码请求
+    Route::post('user/forget/passwords', 'Api\UserController@forgetPassword');
+
+    //app授权到web
+    Route::post('app/toweb/tokens', 'Api\UserController@appToWebToken');
+
+    //前台api
+    Route::group(['middleware' => ['ApiCheck']], function () {
+
+        /*--- 用户信息 ---*/
+        //获取个人信息
+        Route::get('users', 'Api\UserController@index');
+        //编辑个人信息
+        Route::put('users', 'Api\UserController@update');
+
+        /*--- 修改登录密码 ---*/
+        //发送修改登录密码-验证短信
+        Route::post('user/password/sms', 'Api\UserController@sendEditPasswordSms');
+        //发送修改登录密码-验证短信
+        Route::post('user/password/emails', 'Api\UserController@sendEditPasswordEmail');
+        //提交修改登录密码
+        Route::post('user/passwords', 'Api\UserController@editPassword');
+
+        /*--- 绑定手机 ---*/
+        //绑定手机发送短信
+        Route::post('user/phone/add/sms', 'Api\UserController@sendAddPhoneSms');
+        //提交绑定手机
+        Route::post('user/phones', 'Api\UserController@addPhone');
+
+        /*--- 修改绑定手机 ---*/
+        //发送旧手机-验证短信
+        Route::post('user/phone/sms', 'Api\UserController@sendEditPhoneSms');
+        Route::post('user/verifysms', 'Api\UserController@editPhoneVerifySms');
+        //发送新手机-验证短信
+        Route::post('user/phone/new/sms', 'Api\UserController@sendNewPhoneSms');
+        //提交修改手机
+        Route::put('user/phones', 'Api\UserController@editPhone');
+
+        /*--- 绑定邮箱 ---*/
+        //绑定邮箱发送邮件
+        Route::post('user/email/add/msgs', 'Api\UserController@sendAddEmailMsg');
+        //提交绑定邮箱
+        Route::post('user/emails', 'Api\UserController@addEmail');
+
+        /*--- 修改绑定邮箱 ---*/
+        //发送旧邮箱-验证
+        Route::post('user/email/msgs', 'Api\UserController@sendEditEmailMsg');
+        //发送新邮箱-验证邮箱
+        Route::post('user/email/new/msgs', 'Api\UserController@sendEditNewEmailMsg');
+        //提交修改邮箱
+        Route::put('user/emails', 'Api\UserController@EditEmail');
+
+        /*--- 支付密码 ---*/
+        //发送修改支付密码-验证短信
+        Route::post('user/pay/password/sms', 'Api\UserController@sendEditPayPasswordSms');
+        //发送修改支付密码-验证邮箱
+        Route::post('user/pay/password/emails', 'Api\UserController@sendEditPayPasswordEmail');
+        //提交修改支付密码
+        Route::put('user/pay/passwords', 'Api\UserController@editPayPassword');
+        //是否有支付密码
+        Route::get('user/paypasswords', 'Api\UserController@judgeExistPayPassword');
+
+        /*--- 钱包 ---*/
+        //充值发起支付
+        Route::post('user/recharges', 'Api\RechargeController@store');
+        //充值记录列表
+        Route::get('user/recharges', 'Api\RechargeController@index');
+        //我的余额
+        Route::get('user/capitals', 'Api\UserCapitalController@getSelfCapital');
+        //余额日志列表
+        Route::get('user/log/balances', 'Api\UserCapitalController@getBalanceLogList');
+    });
+});

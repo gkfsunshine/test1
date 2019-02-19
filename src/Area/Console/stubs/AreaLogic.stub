@@ -1,0 +1,12 @@
+<?php
+namespace App\Logic;
+
+use JiaLeo\Laravel\Area\AreaLogic as TraitAreaLogic;
+
+class AreaLogic
+{
+    use TraitAreaLogic;
+
+
+
+}

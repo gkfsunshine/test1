@@ -1,0 +1,52 @@
+<?php
+namespace App\Http\Controllers\Admin;
+
+use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+
+class LoginController extends Controller
+{
+
+    /**
+     * 登录
+     *
+     * @param  \Illuminate\Http\Request $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(Request $request)
+    {
+        $this->verify([
+            'account' => '',
+            'password' => '',
+            'locked_verification_code' => 'no_required'
+        ], 'POST');
+
+        $locked_verification_code = !isset($this->verifyData['locked_verification_code']) ? '' : $this->verifyData['locked_verification_code'];
+        $data = \App\Logic\Admin\LoginLogic::login($this->verifyData['account'], $this->verifyData['password'], $locked_verification_code);
+
+        return $this->response($data);
+    }
+
+    /**
+     * 登录密码验证图片验证码
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function loginLockedCaptcha()
+    {
+        \Captcha::setLimit(4)->create('admin:account_check', 5);
+    }
+
+    /**
+     * 退出登录
+     *
+     * @param  int $id
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy()
+    {
+        \Jwt::destroy();
+        return $this->response();
+    }
+
+}

@@ -1,0 +1,93 @@
+<?php
+namespace App\Http\Controllers\Api;
+
+use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+
+class LoginController extends Controller
+{
+    /**
+     * 手机密码/验证码登录
+     *
+     * @param  \Illuminate\Http\Request $request
+     * @return \Illuminate\Http\Response
+     */
+    public function login(Request $request)
+    {
+        $this->verify([
+            'phone' => 'no_required|mobile',
+            'email' => 'no_required|email',
+            'verification_code' => 'no_required',
+            'password' => 'no_required',
+            'locked_verification_code' => 'no_required'
+        ], 'POST');
+
+        $data = \App\Logic\Api\LoginLogic::login($this->verifyData);
+
+        return $this->response($data);
+    }
+
+    /**
+     * 手机登录发送验证码
+     *
+     * @param  \Illuminate\Http\Request $request
+     * @return \Illuminate\Http\Response
+     */
+    public function sendSms(Request $request)
+    {
+        $this->verify([
+            'phone' => 'mobile',
+        ], 'POST');
+        $data = \App\Logic\Api\LoginLogic::sendSms($this->verifyData);
+
+        return $this->response($data);
+    }
+
+    /**
+     * 邮箱登录发送验证码
+     *
+     * @param  \Illuminate\Http\Request $request
+     * @return \Illuminate\Http\Response
+     */
+    public function sendEmail(Request $request)
+    {
+        $this->verify([
+            'email' => 'email',
+        ], 'POST');
+        $data = \App\Logic\Api\LoginLogic::sendEmail($this->verifyData);
+
+        return $this->response($data);
+    }
+
+    /**
+     * 登录密码验证图片验证码
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function lockedCaptcha()
+    {
+        \Captcha::setLimit(4)->create('account_check', 5);
+    }
+
+    /**
+     * 注销登录
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function logout()
+    {
+        \Jwt::destroy();
+
+        return $this->response();
+    }
+
+    /**
+     * 判断是否已经登录
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function status()
+    {
+        $data = \App\Logic\Api\LoginLogic::judgeLogin();
+        return $this->response($data);
+    }
+}

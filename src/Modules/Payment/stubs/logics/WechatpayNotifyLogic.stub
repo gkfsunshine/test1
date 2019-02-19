@@ -1,0 +1,174 @@
+<?php
+
+namespace App\Logic\Pay;
+
+use App\Exceptions\ApiException;
+
+class WechatpayNotifyLogic
+{
+
+
+    /*------ 微信支付回调 ------*/
+
+    /**
+     * 检查回调单号
+     * @param $data
+     *          out_trade_no
+     *          total_fee
+     *          attach
+     * @return \App\Model\LogWechatpayPayModel|\Illuminate\Database\Query\Builder|mixed
+     * @throws ApiException
+     */
+    public static function checkOutTradeNo($data)
+    {
+        //查询支付
+        $is_order = \App\Model\LogWechatpayPayModel::where('out_trade_no', $data['out_trade_no'])
+            ->first();
+
+        if (!$is_order) {
+            throw new ApiException('找不到单号!');
+        }
+
+        //判断是否已处理
+        if ($is_order['status'] == 1) {
+            throw new ApiException('单号已处理!');
+        }
+
+        //判断金额
+        if ($is_order['total_amount'] != $data['total_fee']) {
+            throw new ApiException('价格错误!');
+        }
+
+        //判断自定义返回
+        if ($is_order['passback_params'] != $data['attach']) {
+            throw new ApiException('返回字段不符!');
+        }
+
+        return $is_order;
+    }
+
+
+    /**
+     * @param $data
+     * @param $pay_model
+     * @param $pay_obj
+     * @return bool
+     * @throws ApiException
+     */
+    public static function dealNotify($data, $pay_model, $pay_obj)
+    {
+
+        $data['attach'] = $pay_obj->getPassbackParams($data['attach']);
+        \Log::info($data);
+        if ($data['attach']['action'] == 'recharge') {      //充值
+            return \App\Logic\Api\RechargeLogic::recharge($data['attach']['user_id'], $data['total_fee'], $pay_model, 1);
+        } elseif ($data['attach']['action'] == 'shop_order') {   //订单
+            return \App\Logic\Api\ShopOrderCallbackLogic::orderPay($data['attach']['user_id'], $data['attach']['order_id'], $data['total_fee'], $data['out_trade_no'], $data['transaction_id'], $pay_model, 1);
+        }
+
+        throw new ApiException('错误的支付类型!');
+    }
+
+    /**
+     * 添加微信回调日志
+     * @param array $data 调用微信的数据
+     * @param string $type 支付类型
+     * @return bool
+     * @throws ApiException
+     */
+    public static function addWechatpayNotifyLog($data, $result = true, $error_msg)
+    {
+        $data['deal_status'] = intval($result);
+        $data['error_msg'] = $error_msg;
+
+        $log_wechatpay_model = new \App\Model\LogWechatpayNotifyModel();
+
+        set_save_data($log_wechatpay_model, $data);
+        $res = $log_wechatpay_model->save();
+
+        if (!$res) {
+            \Log::error('微信回调记录日志失败!' . json_encode($data));
+        }
+    }
+
+    /*------ 微信退款回调 ------*/
+
+    /**
+     * 检查退款回调单号
+     * @param $data
+     * @return \App\Model\LogWechatpayPayModel|\Illuminate\Database\Query\Builder|mixed
+     * @throws ApiException
+     */
+    public static function checkRefundOutTradeNo($data)
+    {
+        //查询支付
+        $is_order = \App\Model\LogWechatpayRefundModel::where('out_trade_no', $data['out_trade_no'])
+            ->first();
+
+        if (!$is_order) {
+            throw new ApiException('找不到单号!');
+        }
+
+        //判断是否已处理
+        if ($is_order['status'] == 1) {
+            throw new ApiException('单号已处理!');
+        }
+
+        //判断总金额
+        if ($is_order['total_fee'] != $data['total_fee']) {
+            throw new ApiException('价格错误!');
+        }
+
+        //判断退款价格
+        if ($is_order['refund_fee'] != $data['refund_fee']) {
+            throw new ApiException('退款价格错误!');
+        }
+
+        return $is_order;
+    }
+
+    /**
+     * 处理退款回调
+     * @param $data
+     * @param $pay_model
+     * @param $pay_obj
+     * @return bool
+     * @throws ApiException
+     */
+    public static function dealRefundNotify($data, $refund_model, $pay_obj)
+    {
+
+        $is_success = $data['refund_status'] == 'SUCCESS' ? true : false;
+
+        if ($refund_model->type == 1) {   //订单退款
+            //TODO
+        }
+
+        throw new ApiException('错误的退款类型!');
+    }
+
+    /**
+     * 添加微信回调日志
+     * @param array $data 调用微信的数据
+     * @param string $type 支付类型
+     * @return bool
+     * @throws ApiException
+     */
+    public static function addWechatpayRefundNotifyLog($data, $result = true, $error_msg)
+    {
+        $data['deal_status'] = intval($result);
+        $data['error_msg'] = $error_msg;
+
+        $log_wechatpay_model = new \App\Model\LogWechatpayRefundNotifyModel();
+
+        set_save_data($log_wechatpay_model, $data);
+        $res = $log_wechatpay_model->save();
+
+        if (!$res) {
+            \Log::error('微信退款回调记录日志失败!' . json_encode($data));
+        }
+    }
+
+
+}
+

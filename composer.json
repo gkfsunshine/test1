@@ -1,0 +1,54 @@
+{
+    "name": "jialeo/laravel-package",
+    "description": "The Hanzi-Laravel-Package.",
+    "keywords": ["package", "laravel"],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Liang",
+            "email": "chenjialiang@han-zi.cn"
+        }
+    ],
+    "require": {
+        "php": ">=7.0.0",
+        "firebase/php-jwt": "^4.0",
+        "aliyuncs/oss-sdk-php": "^2.2",
+        "qcloud/cos-sdk-v5": ">=1.0",
+        "gregwar/captcha": "1.*",
+        "laravel/framework": "~5.4",
+        "jpush/jpush": "v3.5.*",
+        "hashids/hashids": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "JiaLeo\\Laravel\\": "src/",
+            "App\\Exceptions\\": "src/Core/Exception"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "JiaLeo\\Laravel\\Core\\CoreProvider",
+                "JiaLeo\\Laravel\\Jwt\\JwtAuthProvider",
+                "JiaLeo\\Laravel\\Core\\CoreProvider",
+                "JiaLeo\\Laravel\\Sms\\SmsProvider",
+                "JiaLeo\\Laravel\\Excel\\ExcelProvider",
+                "JiaLeo\\Laravel\\Wechat\\WechatProvider",
+                "JiaLeo\\Laravel\\Captcha\\CaptchaProvider",
+                "JiaLeo\\Laravel\\Swoole\\SwooleProvider",
+                "JiaLeo\\Laravel\\Signature\\SignatureProvider",
+                "JiaLeo\\Laravel\\Sentry\\SentryProvider"
+            ],
+            "aliases": {
+                "Horizon": "Laravel\\Horizon\\Horizon",
+                "Jwt": "JiaLeo\\Laravel\\Jwt\\JwtAuthFacade",
+                "Sms": "JiaLeo\\Laravel\\Sms\\SmsFacade",
+                "Excel": "JiaLeo\\Laravel\\Excel\\ExcelFacade",
+                "Wechat": "JiaLeo\\Laravel\\Wechat\\WechatFacade",
+                "Captcha": "JiaLeo\\Laravel\\Captcha\\CaptchaFacade",
+                "Signature": "JiaLeo\\Laravel\\Signature\\SignatureFacade"
+            }
+        }
+    }
+
+}

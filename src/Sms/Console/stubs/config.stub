@@ -1,0 +1,80 @@
+<?php
+return [
+    'driver' => 'aliyun',  // 选择使用的运营商  alidayu,aliyun,tencent
+
+    'create_log' => true,     // 是否生成日志
+    'log_save' => 'file',     // 保存类型，mysql,file
+    'is_queue' => false,      //是否加入队列
+
+    //阿里大于
+    'alidayu' => array(
+        'app_key' => env('SMS_APP_KEY', null),
+        'app_secret' => env('SMS_APP_SECRET', null),
+        'sign_name' => env('SMS_SIGN_NAME', null)
+    ),
+
+    //阿里云
+    'aliyun' => array(
+        'app_key' => env('SMS_APP_KEY', null),
+        'app_secret' => env('SMS_APP_SECRET', null),
+        'sign_name' => env('SMS_SIGN_NAME', null)
+    ),
+    //腾讯云
+    'tencent' => array(
+        'app_key' => env('SMS_TENCENT_APP_ID', null),
+        'app_secret' => env('SMS_TENCENT_APP_KEY', null),
+        'sign_name_inland' => env('SMS_TENCENT_SIGN_NAME_INLAND', null),
+        'sign_name_overseas' => env('SMS_TENCENT_SIGN_NAME_OVERSEAS', null)
+    ),
+
+    //模板内容
+    'templet' => array(
+        '1' => array(
+            'template_code' => 'SMS_39890059',                                          // 模板代码
+            'content' => '验证码${code}，您正在注册成为${product}用户，感谢您的支持！',        // 消息模板
+            'type' => 'verification'                                                    // verification:验证码;notification:通知短信
+        ),
+        //登录
+        2 => [
+            'template_code' => env('SMS_CODE_LOGIN', 'SMS_71336034'),
+            'content' => '您好，您的手机验证码是：${code}，当前为登录申请，请勿向他人泄漏。本次验证码5分钟内有效！',
+        ],
+        //修改密码
+        3 => [
+            'template_code' => env('SMS_CODE_EDITPWD', 'SMS_71216334'),
+            'content' => '您好，您的手机验证码是：${code}，当前为修改密码申请，请勿向他人泄漏。本次验证码5分钟内有效！',
+        ],
+        //更换手机
+        4 => [
+            'template_code' => env('SMS_CODE_EDITPHONE', 'SMS_71376094'),
+            'content' => '您好，您的手机验证码是：${code}，当前为更换手机号申请，请勿向他人泄漏。本次验证码5分钟内有效！',
+        ],
+        //忘记密码
+        5 => [
+            'template_code' => env('SMS_CODE_FORGETPWD', 'SMS_71381119'),
+            'content' => '您好，您的手机验证码是：${code}，若非本人操作，请忽略，本次验证码5分钟内有效！',
+        ],
+        //更改支付密码申请
+        6 => [
+            'template_code' => env('SMS_CODE_EDITPWD', 'SMS_71371163'),
+            'content' => '您好，您的手机验证码是：${code}，当前为更改支付密码申请，请勿向他人泄漏。本次验证码5分钟内有效！',
+        ],
+        //绑定手机
+        7 => [
+            'template_code' => env('SMS_CODE_ADDPHONE', 'SMS_71381119'),
+            'content' => '您好，您的手机验证码是：${code}，若非本人操作，请忽略，本次验证码5分钟内有效！',
+        ],
+    ),
+
+    // 发送频率限制
+    // 阿里大于和阿里云云通讯:
+    // 短信验证码 ：使用同一个签名，对同一个手机号码发送短信验证码，1条/分钟，5条/小时，10条/天。一个手机号码通过阿里大于平台只能收到40条/天。
+    // 短信通知： 使用同一个签名和同一个短信模板ID，对同一个手机号码发送短信通知，支持50条/日（指非自然日）
+    // 此扩展包不会对短信通知类型作限流
+    'limit' => array(
+        'is_on' => true,
+        'limit_per_minute' => 1,
+        'limit_per_hour' => 5,
+        'limit_per_day' => 10,
+    )
+];

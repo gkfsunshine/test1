@@ -1,0 +1,54 @@
+<?php
+
+return [
+    /*
+     * Debug 模式，bool 值：true/false
+     *
+     * 当值为 false 时，所有的日志都不会记录
+     */
+    'origin' => 'file',    //配置来源,mysql or file,  file为读本配置文件,否则读mysql上
+
+    'default' => 'mp',
+
+    /*
+     * 账号基本信息，请从微信公众平台/开放平台获取
+     */
+    'mp' => array(
+        'appid' => env('WECHAT_MP_APPID', 'your-app-id'),         // AppID
+        'appsecret' => env('WECHAT_MP_SECRET', 'your-app-secret'),     // AppSecret
+        'token' => env('WECHAT_MP_TOKEN', 'your-token'),          // Token
+        'encodingaeskey' => env('WECHAT_MP_AES_KEY', ''),                    // EncodingAESKey
+    ),
+
+    'app' => array(
+        'appid' => env('WECHAT_APP_APPID', 'your-app-id'),         // AppID
+        'appsecret' => env('WECHAT_APP_SECRET', 'your-app-secret'),     // AppSecret
+        'token' => env('WECHAT_APP_TOKEN', 'your-token'),          // Token
+        'encodingaeskey' => env('WECHAT_APP_AES_KEY', ''),                    // EncodingAESKey
+    ),
+
+    /**
+     * 小程序
+     */
+    'miniapp' => array(
+        'appid' => env('WECHAT_MINIAPP_APPID', ''),
+        'appsecret' => env('WECHAT_MINIAPP_APPSECRET', ''),
+    ),
+
+    /*
+     * 网页端设置
+     */
+    /*'web'=>array(
+        'appid'  => env('WEB_WECHAT_APPID', 'your-app-id'),         // AppID
+        'appsecret'  => env('WEB_WECHAT_SECRET', 'your-app-secret'),     // AppSecret
+    ),*/
+
+    /*
+     * APP应用设置
+     */
+    /*'app'=>array(
+        'appid'  => env('APP_WECHAT_APPID', 'your-app-id'),         // AppID
+        'appsecret'  => env('APP_WECHAT_SECRET', 'your-app-secret'),     // AppSecret
+    )*/
+
+];

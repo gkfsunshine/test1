@@ -1,0 +1,96 @@
+<?php
+namespace App\Logic\Api;
+
+use App\Exceptions\ApiException;
+
+class LogUserBalanceLogic
+{
+
+    /**
+     * 会员余额日志列表
+     * @param array $data 筛选数据
+     *        int $data.type //变动类型:1,余额充值;2,余额支付订单;3,售后退款;4,余额提现
+     *        int $data.is_plus 是否为正
+     *        string $data.transaction_id 交易流水号
+     *        int $data.start_time 时间区间-开始时间
+     *        int $data.end_time 时间区间-结束时间
+     * @return \App\Model\LogUserBalanceModel|array|\Illuminate\Database\Query\Builder
+     */
+    public static function getLogUserBalanceList($data)
+    {
+        $user_id = \Jwt::get('user_info.user_id');
+        $list = \App\Model\LogUserBalanceModel::where('is_on', '=', 1)
+            ->orderBy('created_at', 'DESC')
+            ->select(['id', 'balance', 'amount', 'is_plus', 'type', 'transaction_id', 'created_at'])
+            ->where('user_id', '=', $user_id);
+
+        //根据变动类型筛选:1,余额充值;
+        if (isset($data['type'])) {
+            $list->where('type', '=', $data['type']);
+        }
+
+        //根据余额正负筛选
+        if (isset($data['is_plus'])) {
+            $list->where('is_plus', '=', $data['is_plus']);
+        }
+
+        //根据交易流水号筛选
+        if (isset($data['transaction_id'])) {
+            $list->where('transaction_id', '=', $data['transaction_id']);
+        }
+
+        //根据时间筛选
+        if (isset($data['start_time']) && isset($data['end_time'])) {
+            if ($data['start_time'] > $data['end_time']) {
+                throw new ApiException('数据错误');
+            }
+            $time = [$data['start_time'], $data['end_time']];
+            $list->whereBetween('created_at', $time);
+        }
+
+        $result_list = $list->paginate(15);
+
+        $result_list->each(function ($item) {
+            $item->time = date("Y-m", $item->created_at->timestamp);
+
+            if ($item->is_plus == 1) {
+                $item->after_amount = $item->balance + $item->amount;
+            } else {
+                $item->after_amount = $item->balance - $item->amount;
+            }
+        });
+
+        $grouped = $result_list->groupBy('time');
+        $lists = [];
+
+        //处理格式
+        $grouped->each(function ($item, $key) use (&$lists, $list, $data) {
+            $lists[$key]['date'] = $key;
+            $str = explode('-', $key);
+            $lists[$key]['year_str'] = $str[0] . '年';
+            $lists[$key]['month_str'] = $str[1] . '月';
+            $lists[$key]['list'] = $item;
+
+            //查当月累计金额
+            if (isset($data['type']) || isset($data['is_plus'])) {
+                $lists[$key]['total_amount'] = $item->sum('amount');
+            }
+        });
+
+
+        $lists = array_values($lists);
+
+        $list = $result_list->toArray();
+        foreach ($list['data'] as $key => $val) {
+
+            if (isset($lists[$key])) {
+                $list['data'][$key] = $lists[$key];
+            } else {
+                unset($list['data'][$key]);
+            }
+        }
+
+        return $list;
+    }
+
+}

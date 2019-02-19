@@ -1,0 +1,173 @@
+<?php
+namespace App\Http\Controllers\Admin;
+
+use App\Exceptions\ApiException;
+use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+use JiaLeo\Laravel\Upload\UploadClient;
+
+class UploadController extends Controller
+{
+
+    /**
+     * 第一步:获取上传id
+     */
+    public function getUploadID(Request $request)
+    {
+        $this->verify([
+            'total_size' => 'egnum',
+            'part_size' => 'egnum',
+            'file_type' => '',
+            'filename' => '',
+            'upload_type' => 'in:admin_headpic:article_cover',
+            'upload_setting' => 'in:cloud:local',
+        ], 'POST');
+        $data = $this->verifyData;
+
+        //---全局设置参数
+        $upload_setting = 'local';          //上传设置,local,本地;cloud,云
+        $is_multi = false;                  //是否分块
+        $part_size = 204800;                // 分块时,没一块的大小单位B,必须大于102400
+        $download_filename = false;         //下载时,文件的名称,false为不设置,true为文件名,字符串为文件名
+
+        //此处作权限控制(针对每个类型可以覆盖全局设置参数)
+        switch ($data['upload_type']) {
+            case 'admin_headpic' :
+                $dir = 'images/headpic/admin/';
+                //$is_multi = true;   //是否分块,覆盖全局配置
+
+                \JiaLeo\Laravel\Upload\ExtCheck::checkFileTypeOfGroup($data['file_type'], 'image');
+                break;
+            case 'article_cover' :
+                $dir = 'images/article/cover/';
+                \JiaLeo\Laravel\Upload\ExtCheck::checkFileTypeOfGroup($data['file_type'], 'image');
+                break;
+            default :
+                throw new ApiException('错误的上传类型!', 'UPLOAD_ERROR');
+        }
+
+        /* 地址设置 */
+        //配置云callback路径
+        $cloud_callback = $request->getSchemeAndHttpHost() . '/api/admin/upload/cloud/callbacks';
+
+        //配置(云)上传完成后的请求的地址
+        $cloud_complete_url = '/api/admin/upload/cloud/completes/';
+
+        //配置(本地)上传文件路径
+        $local_upload_host = $request->getSchemeAndHttpHost() . '/api/admin/upload/files';
+        //配置(本地)完成后调用的url
+        $local_complete_url = '/api/admin/upload/local/completes/';
+
+        //uplaod表额外字段
+        $admin_id = \Jwt::get('admin_info.admin_id');
+        $extra_data['admin_id'] = $admin_id;
+
+        if ($upload_setting == 'cloud') {       //云上传
+
+            $cloud_client = new UploadClient();
+            $cloud_client->getUploadId(\App\Model\UploadModel::class, $data['total_size'], $part_size, $data['file_type'], $dir, $data['filename'], $cloud_callback, $is_multi, '', $extra_data, true, $download_filename);
+            $upload_sign = $cloud_client->uploadSign;
+            $upload_id = $cloud_client->uploadId;
+            $part_num = $cloud_client->partNum;
+
+            //配置完成后调用的url
+            $complete_url = $cloud_complete_url;
+
+            $cloud_type = $cloud_client->driver->driver_name;
+
+        } else {        //上传到本地
+
+            $local_obj = new \JiaLeo\Laravel\Upload\LocalOss();
+
+            $local_obj->getUploadId(\App\Model\UploadModel::class, $data['total_size'], $part_size, $data['file_type'], $dir, $data['filename'], $local_upload_host, $is_multi, '', $extra_data, true, $download_filename);
+            $upload_sign = $local_obj->uploadSign;
+            $upload_id = $local_obj->uploadId;
+            $part_num = $local_obj->partNum;
+
+            //配置完成后调用的url
+            $complete_url = $local_complete_url;
+
+            $cloud_type = 'local';
+        }
+
+        return $this->response([
+            'cloud_type' => $cloud_type,
+            'upload_id' => $upload_id,
+            'part_num' => $part_num,
+            'part_size' => $part_size,
+            'upload_setting' => $upload_setting,
+            'complete_url' => $complete_url
+        ],
+            $upload_sign);
+    }
+
+    /**
+     *  完成(云上传)
+     */
+    public function putCloudUploadComplete($id)
+    {
+        $this->verifyId($id);
+
+        $client = new UploadClient();
+        $data = $client->uploadComplete(\App\Model\UploadModel::class, $id);
+        return $this->response([
+            'path' => $data['path'],
+            'url' => $data['url'],
+            'upload_id' => $id,
+            'origin_filename' => $data['origin_filename']
+        ]);
+    }
+
+    /**
+     *  完成(本地上传)
+     */
+    public function putLocalUploadComplete($id)
+    {
+        $this->verifyId($id);
+
+        $obj = new \JiaLeo\Laravel\Upload\LocalOss();
+        $data = $obj->multiUploadComplete(\App\Model\UploadModel::class, $id);
+
+        return $this->response(['path' => $data['path'], 'url' => $data['url'], 'upload_id' => $id, 'origin_filename' => $data['origin_filename']]);
+    }
+
+    /**
+     *  上传回调(云上传)
+     */
+    public function uploadCallback()
+    {
+        $obj = new UploadClient();
+        $sign = $obj->notify(\App\Model\UploadModel::class);
+        return $sign;
+    }
+
+
+    /**
+     * 本地上传
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     * @throws ApiException
+     */
+    public function upload(Request $request)
+    {
+        $this->verify([
+            'upload_id' => 'egnum',
+            'part_now' => 'egnum'
+        ], 'POST');
+        $data = $this->verifyData;
+
+        //完成后是否上传到阿里云
+        $is_upload = true;
+
+        $set_download_filename = false;
+        $download_name = request()->header('content-disposition' . '');
+        if (!empty($download_name)) {
+            $set_download_filename = str_replace('attachment;filename=', '', $download_name);
+        }
+
+        $local_obj = new \JiaLeo\Laravel\Upload\LocalOss();
+        $result = $local_obj->updatePart(\App\Model\UploadModel::class, $data['upload_id'], $data['part_now'], $is_upload, '', $set_download_filename);
+
+        return $this->response($result);
+    }
+}

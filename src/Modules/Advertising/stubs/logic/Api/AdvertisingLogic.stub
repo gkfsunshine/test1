@@ -1,0 +1,42 @@
+<?php
+
+namespace App\Logic\Api;
+
+use App\Exceptions\ApiException;
+
+class AdvertisingLogic
+{
+
+    /**
+     * 列表
+     * @param array $data 列表查询条件
+     *              $data.
+     * @return
+     */
+    public static function getAdvertisingList($data)
+    {
+        $list = \App\Model\AdvertisingModel::select(['id', 'title', 'cover', 'sort', 'link', 'position'])
+            ->where('is_on', 1)
+            ->where('is_show', 1);
+
+        //筛选平台
+        if (isset($data['device_platform'])) {
+            $list->where('device_platform', $data['device_platform']);
+        }
+
+        //筛选位置
+        if (isset($data['position'])) {
+            $list->where('position', $data['position']);
+        }
+
+        $list = $list->orderBy('sort', 'desc')->orderBy('created_at', 'desc')->get();
+
+        load_helper('File');
+
+        $list->each(function ($item, $key) {
+            $item->cover = auto_url($item->cover);
+        });
+
+        return $list;
+    }
+}

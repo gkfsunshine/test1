@@ -1,0 +1,1080 @@
+<?php
+
+namespace App\Logic\Api;
+
+use App\Exceptions\ApiException;
+use App\Model\UserCapitalModel;
+use App\Model\UserModel;
+
+class UserLogic
+{
+
+    /**
+     * 列表
+     * @param array $data 列表查询条件
+     *              $data.
+     * @return
+     */
+    public static function getUserInfo()
+    {
+        $user_id = \Jwt::get('user_info.user_id');
+        $user = UserModel::where('is_on', 1)
+            ->where('id', $user_id)
+            ->select(['id', 'email', 'headimg', 'username', 'phone', 'sex', 'birthday', 'status',
+                'is_wechat', 'is_qq', 'is_weibo', 'province', 'city', 'area', 'desc'])
+            ->with(['oauth' => function ($query) {
+                $query->select(['id', 'user_id', 'oauth_type', 'nickname']);
+            }])
+            ->first();
+
+        if (!$user) {
+            throw new ApiException('你还没有登录或登录已过期', 'NO LOGIN');
+        }
+
+        if ($user->status == 0) {
+            throw new ApiException('用户状态异常');
+        }
+
+        $user_capital = UserCapitalModel::where('user_id', $user_id)->first(['integral']);
+
+        load_helper('File');
+        $user->headimg = auto_url($user->headimg);
+
+        $user->is_bind = empty($user->phone) ? 0 : 1;
+        $user->integral = $user_capital->integral;
+
+        //私隐化邮箱和手机号码
+        load_helper('String');
+        $user->email = hide_email($user->email);
+        $user->phone = hide_phone($user->phone);
+
+        return $user;
+    }
+
+    /**
+     * 获取详情
+     * @param int $id ID
+     * @return
+     * @throws ApiException
+     */
+    public static function getOneUser($id)
+    {
+        $data = \App\Model\UserModel::where('is_on', 1)
+            ->select(['headimg', 'username', 'status'])
+            ->find($id);
+
+        if (!$data) {
+            throw new ApiException('用户不存在!');
+        }
+
+        if ($data->status == 0) {
+            throw new ApiException('用户状态异常');
+        }
+
+        return $data;
+    }
+
+    /**
+     * 添加
+     * @param array $data 要添加的数据
+     * @return bool
+     * @throws ApiException
+     */
+    public static function editUser($data)
+    {
+        $user_id = \Jwt::get('user_info.user_id');
+        //用户是否存在
+        $res = \App\Model\UserModel::where('is_on', '=', 1)
+            ->select(['id'])
+            ->find($user_id);
+
+        if (!$res) {
+            throw new ApiException('用户不存在!');
+        }
+
+        if (isset($data['headimg'])) {
+            $img_data = \App\Model\UploadModel::where('user_id', $user_id)
+                ->where('is_on', 1)
+                ->select('id', 'path')
+                ->find($data['headimg']);
+            if (empty($img_data)) {
+                throw new ApiException('图片不存在');
+            }
+            $data['headimg'] = $img_data['path'];
+        }
+        set_save_data($res, $data);
+        $update_res = $res->save();
+        if (!$update_res) {
+            throw new ApiException('数据库错误!');
+        }
+
+        return true;
+    }
+
+    /**
+     * 绑定手机
+     * @param array $data 筛选数据
+     *        int $data.phone 手机
+     * @return bool
+     * @throws ApiException
+     */
+    public static function addPhone($data)
+    {
+        $user_id = \Jwt::get('user_info')['user_id'];
+
+        //用户是否存在
+        $res = \App\Model\UserModel::where('is_on', '=', 1)
+            ->select(['id', 'phone'])
+            ->find($user_id);
+
+        if (!$res) {
+            throw new ApiException('用户不存在!');
+        }
+
+        if (!empty($res->phone)) {
+            throw new ApiException('你已经绑定了手机!');
+        }
+
+        //判读验证码是否正确
+        \Sms::checkCaptcha('add_phone_code', $data['phone'], $data['verification_code']);
+
+        //判断手机是否重复
+        $phone = \App\Model\UserModel::where('is_on', '=', 1)
+            ->where('phone', '=', $data['phone'])
+            ->select(['id'])
+            ->first();
+        if ($phone) {
+            throw new ApiException('该手机号已绑定!');
+        }
+
+        set_save_data($res, ['phone' => $data['phone']]);
+        $update_res = $res->save();
+        if (!$update_res) {
+            throw new ApiException('数据错误!');
+        }
+
+        \Sms::deleteCaptcha('add_phone_code');
+
+        return true;
+    }
+
+    /**
+     * 发送修改手机-旧手机验证码
+     * @param array $type要发送验证码的类型
+     * @return bool
+     * @throws ApiException
+     */
+    public static function sendEditPhoneSms()
+    {
+        $user_id = \Jwt::get('user_info.user_id');
+
+        //用户是否存在
+        $res = \App\Model\UserModel::where('is_on', '=', 1)
+            ->select(['id', 'phone'])
+            ->find($user_id);
+
+        if (!$res) {
+            throw new ApiException('无效账号!');
+        }
+        if ($res->phone == 0) {
+            throw new ApiException('你还没有绑定手机!');
+        }
+
+        $data = \App\Logic\SmsLogic::editPhone($res->phone);
+        return $data;
+    }
+
+    /**
+     * 修改手机前验证验证码
+     * @param array $data 筛选数据
+     *        string $data.verification_code 验证码
+     * @return bool
+     * @throws ApiException
+     */
+    public static function editPhoneVerifySms($data)
+    {
+        $user_id = \Jwt::get('user_info.user_id');
+
+        $user = \App\Model\UserModel::where('id', $user_id)
+            ->where('is_on', 1)
+            ->first(['id', 'phone']);
+
+        if (!$user) {
+            throw new ApiException('用户不存在');
+        }
+        if (empty($user['phone'])) {
+            throw new ApiException('请先绑定手机号码');
+        }
+
+        //判读验证码是否正确
+        \Sms::checkCaptcha('edit_code', (string)$user['phone'], $data['verification_code']);
+
+        \Sms::deleteCaptcha('edit_code');
+
+        $edit_phone_token = rand(10000, 99999);
+        \Jwt::set('sms_check.edit_phone_token', array(
+            'msgcode' => $edit_phone_token,
+            'expires_time' => time() + 60 * 10   //10分钟有效期
+        ));
+
+        return ['edit_phone_token' => $edit_phone_token];
+    }
+
+    /**
+     * 发送修改手机号发送新手机验证码
+     * @param array $data要发送验证码的数据
+     * @return bool
+     * @throws ApiException
+     */
+    public static function sendNewPhoneSms($data)
+    {
+        $user_id = \Jwt::get('user_info')['user_id'];
+
+        //用户是否存在
+        $res = \App\Model\UserModel::where('is_on', '=', 1)
+            ->select(['id', 'phone'])
+            ->find($user_id);
+
+        if (!$res) {
+            throw new ApiException('无效账号!');
+        }
+
+        if ($res->phone == 0) {
+            throw new ApiException('你还没有绑定手机!');
+        }
+
+        //用户是否存在
+        $is_phone = \App\Model\UserModel::where('is_on', '=', 1)
+            ->where('phone', '=', $data['phone'])
+            ->select(['id', 'phone'])
+            ->first();
+
+        if ($is_phone) {
+            throw new ApiException('该手机已绑定!');
+        }
+
+        \App\Logic\SmsLogic::newPhone($data['phone']);
+
+        return true;
+    }
+
+    /**
+     * 修改手机
+     * @param array $data 修改的信息
+     * @param int $id ID
+     * @return bool
+     * @throws ApiException
+     */
+    public static function editPhone($data)
+    {
+        $user_id = \Jwt::get('user_info')['user_id'];
+
+        //判读验证码是否正确
+        \Sms::checkCaptcha('new_password_code', $data['phone'], $data['verification_code']);
+
+        //判读验证码是否正确
+        $edit_code = \Jwt::get('sms_check.edit_phone_token');
+        if (empty($edit_code)) {
+            throw new ApiException('token错误');
+        }
+
+        if ($edit_code['msgcode'] != $data['edit_phone_token']) {
+            throw new ApiException('修改手机token错误');
+        }
+
+        //用户是否存在
+        $res = \App\Model\UserModel::where('is_on', '=', 1)
+            ->select(['id'])
+            ->find($user_id);
+
+        if (!$res) {
+            throw new ApiException('用户不存在!');
+        }
+
+        //判断手机是否重复
+        $phone = \App\Model\UserModel::where('is_on', '=', 1)
+            ->where('phone', '=', $data['phone'])
+            ->select(['id'])
+            ->first();
+        if ($phone) {
+            throw new ApiException('该手机号已绑定!');
+        }
+
+        set_save_data($res, ['phone' => $data['phone']]);
+        $update_res = $res->save();
+        if (!$update_res) {
+            throw new ApiException('数据错误!');
+        }
+
+        \Sms::deleteCaptcha('edit_phone_token');
+
+        return true;
+    }
+
+    /**
+     * 绑定邮箱
+     * @param array $data 筛选数据
+     *        int $data.phone 手机
+     * @return bool
+     * @throws ApiException
+     */
+    public static function addEmail($data)
+    {
+        $user_id = \Jwt::get('user_info')['user_id'];
+
+        //用户是否存在
+        $res = \App\Model\UserModel::where('is_on', '=', 1)
+            ->select(['id', 'email'])
+            ->find($user_id);
+
+        if (!$res) {
+            throw new ApiException('用户不存在!');
+        }
+
+        if (!empty($res->email)) {
+            throw new ApiException('你已经绑定了邮箱!');
+        }
+
+        //判读验证码是否正确
+        \JiaLeo\Laravel\Captcha\Custom::checkCaptcha('email_check:add_email_code', $data['verification_code'], array('email' => $data['email']));
+
+        //判断邮箱是否重复
+        $email = \App\Model\UserModel::where('is_on', ' = ', 1)
+            ->where('email', ' = ', $data['email'])
+            ->select(['id'])
+            ->first();
+        if ($email) {
+            throw new ApiException('该邮箱已绑定!');
+        }
+
+        set_save_data($res, ['email' => $data['email']]);
+        $update_res = $res->save();
+        if (!$update_res) {
+            throw new ApiException('数据错误!');
+        }
+
+        \JiaLeo\Laravel\Captcha\Custom::deleteCaptcha('email_check:add_email_code');
+
+        return true;
+    }
+
+
+    /**
+     * 发送绑定邮箱邮件
+     * @param array $data要发送验证码的数据
+     * @return bool
+     * @throws ApiException
+     */
+    public static function sendAddEmailMsg($data)
+    {
+        $user_id = \Jwt::get('user_info')['user_id'];
+
+        //用户是否存在
+        $res = \App\Model\UserModel::where('is_on', '=', 1)
+            ->select(['id', 'email'])
+            ->find($user_id);
+
+        if (!$res) {
+            throw new ApiException('用户不存在!');
+        }
+
+        if (!empty($res->email)) {
+            throw new ApiException('你已经绑定了邮箱!');
+        }
+
+        //邮箱是否已绑定
+        $res = \App\Model\UserModel::where('is_on', '=', 1)
+            ->where('email', '=', $data['email'])
+            ->select(['id', 'email'])
+            ->first();
+
+        if ($res) {
+            throw new ApiException('该邮箱已绑定!');
+        }
+
+        \App\Logic\EmailLogic::addEmail($data['email']);
+
+        return true;
+    }
+
+    /**
+     * 发送修改密码手机验证码短信
+     * @return bool
+     * @throws ApiException
+     */
+    public static function sendEditPasswordSms()
+    {
+        $user_id = \Jwt::get('user_info.user_id');
+
+        //用户是否存在
+        $res = \App\Model\UserModel::where('is_on', '=', 1)
+            ->select(['id', 'phone'])
+            ->find($user_id);
+
+        if (!$res) {
+            throw new ApiException('无效账号!');
+        }
+
+        if ($res->phone == 0) {
+            throw new ApiException('你还没有绑定手机!');
+        }
+
+        \App\Logic\SmsLogic::editPassword($res->phone);
+
+        return true;
+    }
+
+    /**
+     * 发送修改支付密码邮箱邮件
+     * @param array $data要发送验证码的数据
+     * @return bool
+     * @throws ApiException
+     */
+    public static function sendEditPasswordEmail()
+    {
+        $user_id = \Jwt::get('user_info')['user_id'];
+
+        //用户是否存在
+        $res = \App\Model\UserModel::where('is_on', '=', 1)
+            ->select(['id', 'email'])
+            ->find($user_id);
+
+        if (!$res) {
+            throw new ApiException('用户不存在!');
+        }
+
+        if (empty($res->email)) {
+            throw new ApiException('你还没有绑定了邮箱!');
+        }
+
+        \App\Logic\EmailLogic::editPassword($res->email);
+
+        return true;
+    }
+
+    /**
+     * 修改密码
+     * @param array $data 筛选数据
+     *        string $data.verification_code 验证码
+     *        string $data.new_password 新密码
+     * @return bool
+     * @throws ApiException
+     */
+    public static function editPassword($data)
+    {
+        $user_id = \Jwt::get('user_info')['user_id'];
+        $user = \App\Model\UserModel::where('is_on', 1)
+            ->select(['id', 'phone', 'email'])
+            ->find($user_id);
+        if (!$user) {
+            throw new ApiException('用户不存在');
+        }
+
+        if ($data['type'] == 'phone') {
+            if (empty($user->phone)) {
+                throw new ApiException('请先绑定手机号码');
+            }
+
+            //判读验证码是否正确
+            \Sms::checkCaptcha('pwd_code', $user->phone, $data['verification_code']);
+        } elseif ($data['type'] == 'email') {
+
+            if (empty($user->email)) {
+                throw new ApiException('请先绑定邮箱');
+            }
+
+            $verfy_data = array('email' => $user->email);
+            \JiaLeo\Laravel\Captcha\Custom::checkCaptcha('email_check:edit_password_code', $data['verification_code'], $verfy_data);
+        }
+
+        //与密码比对
+        $user_auth_pwd = \App\Model\UserAuthPasswordModel::where('user_id', '=', $user_id)
+            ->first(['id', 'password', 'salt']);
+        if (empty($user_auth_pwd)) {
+            throw new ApiException('登录失败!');
+        }
+
+        //密码加密
+        load_helper('Password');
+        $pwd = encrypt_password($data['old_password'], $user_auth_pwd['salt']);
+        if ($user_auth_pwd['password'] != $pwd) {
+            throw new ApiException('密码错误!');
+        }
+
+        //密码加密
+        $get_password = create_password($data['new_password'], $salt);
+
+        //用户密码信息是否存在
+        $res = \App\Model\UserAuthPasswordModel::select(['id'])
+            ->find($user_auth_pwd['id']);
+
+        if (!$res) {
+            throw new ApiException('密码信息不存在!');
+        }
+
+        set_save_data($res, ['password' => $get_password, 'salt' => $salt]);
+        $update_res = $res->save();
+        if (!$update_res) {
+            throw new ApiException('数据错误!');
+        }
+
+        return true;
+    }
+
+    /**
+     * 找回密码第一步
+     * @param array $data 验证数据
+     * @return array
+     * @throws ApiException
+     */
+    public static function forgetPasswordByFirstStep($data)
+    {
+
+        if (isset($data['phone'])) {
+            $type = 'phone';
+        } elseif (isset($data['email'])) {
+            $type = 'email';
+        } else {
+            throw new ApiException('数据错误!');
+        }
+
+        if ($type == 'phone') {
+            //判读验证码是否正确
+            \Sms::checkCaptcha('forget_password_code', $data['phone'], $data['verification_code']);
+        } else if ($type == 'email') {
+            $verfy_data = array('email' => $data['email']);
+            \JiaLeo\Laravel\Captcha\Custom::checkCaptcha('email_check:forget_password_code', $data['verification_code'], $verfy_data);
+        }
+
+        //判断用户名
+        $user = \App\Model\UserModel::where('is_on', '=', 1);
+
+        if ($type == 'phone') {
+            $user->where('phone', '=', $data['phone']);
+        } elseif ($type == 'email') {
+            $user->where('email', '=', $data['email']);
+        }
+
+        $user = $user->first(['id']);
+        if (!$user) {
+            throw new ApiException('无效账号!');
+        }
+
+
+        if ($type == 'phone') {
+            \Sms::deleteCaptcha('forget_password_code');
+
+            //返回下一步token
+            $edit_password_token = str_random(16);
+            \Jwt::set('sms_check.edit_password_token', array(
+                'phone' => $data['phone'],
+                'user_id' => $user->id,
+                'msgcode' => $edit_password_token,
+                'expires_time' => time() + 60 * 10   //10分钟有效期
+            ));
+        } elseif ($type == 'email') {
+            \JiaLeo\Laravel\Captcha\Custom::deleteCaptcha('email_check:forget_password_code');
+            //返回下一步token
+            $edit_password_token = str_random(16);
+            \Jwt::set('email_check.edit_password_token', array(
+                'email' => $data['email'],
+                'user_id' => $user->id,
+                'msgcode' => $edit_password_token,
+                'expires_time' => time() + 60 * 10   //10分钟有效期
+            ));
+        } else {
+            throw new ApiException('错误的类型!');
+        }
+
+        return ['edit_password_token' => $edit_password_token];
+    }
+
+    /**
+     * 找回密码
+     * @param array $data 筛选数据
+     *        string $data.verification_code 验证码
+     *        string $data.pay_password 新交易密码
+     * @return bool
+     * @throws ApiException
+     */
+    public static function forgetPasswordBySecondStep($data)
+    {
+
+        if (isset($data['phone'])) {
+            $type = 'phone';
+            //判读token是否正确
+            $code = \Jwt::get('sms_check.edit_password_token');
+            if (empty($code)) {
+                throw new ApiException('请重新验证手机!');
+            }
+
+            if ($data['phone'] != $code['phone']) {
+                throw new ApiException('请重新验证手机!');
+            }
+
+        } elseif (isset($data['email'])) {
+            $type = 'email';
+
+            //判读token是否正确
+            $code = \Jwt::get('email_check.edit_password_token');
+            if (empty($code)) {
+                throw new ApiException('请重新验证手机!');
+            }
+
+            if ($data['email'] != $code['email']) {
+                throw new ApiException('请重新验证邮箱!');
+            }
+
+        } else {
+            throw new ApiException('数据错误!');
+        }
+
+        //验证code
+        if ($code['msgcode'] != $data['edit_password_token']) {
+            throw new ApiException('验证失败!');
+        }
+
+        //验证是否过期
+        if ($code['expires_time'] < time()) {
+            throw new ApiException('验证已过期,请重新验证!');
+        }
+
+        $user_id = $code['user_id'];
+
+        //密码加密
+        load_helper('Password');
+        $get_password = create_password($data['password'], $salt);
+        $save_data = ['password' => $get_password, 'salt' => $salt];
+
+        //是否有登录密码信息
+        $user_auth_pwd = \App\Model\UserAuthPasswordModel::where('user_id', $user_id)
+            ->first(['id']);
+        if (!$user_auth_pwd) {      //之前没有密码记录,新增
+            $save_data['user_id'] = $user_id;
+            $user_auth_pwd_model = new \App\Model\UserAuthPasswordModel();
+            set_save_data($user_auth_pwd_model, $save_data);
+            $res = $user_auth_pwd_model->save();
+        } else {                       //之前有密码记录,更新
+            $res = \App\Model\UserAuthPasswordModel::where('user_id', $user_id)
+                ->update($save_data);
+        }
+
+        if (!$res) {
+            throw new ApiException('数据错误!');
+        }
+
+        if ($type == 'phone') {
+            \Sms::deleteCaptcha('edit_password_token');
+        } elseif ($type == 'email') {
+            \Jwt::delete('email_check');
+        }
+
+        return true;
+    }
+
+    /**
+     * 修改交易密码
+     * @param array $data 筛选数据
+     *        string $data.verification_code 验证码
+     *        string $data.pay_password 新交易密码
+     * @return bool
+     * @throws ApiException
+     */
+    public static function editPayPassword($data)
+    {
+        $user_id = \Jwt::get('user_info')['user_id'];
+        //是否有这个用户
+        $user = \App\Model\UserModel::where('is_on', 1)
+            ->select(['id', 'phone', 'email'])
+            ->find($user_id);
+        if (empty($user)) {
+            throw new ApiException('用户不存在!');
+        }
+
+        if ($data['type'] == 'phone') {
+            if (empty($user->phone)) {
+                throw new ApiException('请先绑定手机号码!');
+            }
+
+            //判读验证码是否正确
+            \Sms::checkCaptcha('pay_password_code', $user->phone, $data['verification_code']);
+        } else if ($data['type'] == 'email') {
+            if (empty($user->email)) {
+                throw new ApiException('请先绑定邮箱!');
+            }
+
+            $verfy_data = array('email' => $user->email);
+            \JiaLeo\Laravel\Captcha\Custom::checkCaptcha('email_check:edit_pay_password_code', $data['verification_code'], $verfy_data);
+        }
+
+        //密码加密
+        load_helper('Password');
+        $get_password = create_password($data['pay_password'], $salt);
+
+        set_save_data($user, ['pay_password' => $get_password, 'salt' => $salt]);
+        $update_res = $user->save();
+        if (!$update_res) {
+            throw new ApiException('数据错误!');
+        }
+
+        if ($data['type'] == 'phone') {
+            \Sms::deleteCaptcha('pay_password_code');
+        } else if ($data['type'] == 'email') {
+            \JiaLeo\Laravel\Captcha\Custom::deleteCaptcha('email_check:edit_pay_password_code');
+        }
+
+        return true;
+    }
+
+    /**
+     * 发送找回密码发送手机验证码
+     * @param array $data 包含phone手机号码
+     * @return bool
+     * @throws ApiException
+     */
+    public static function sendForgetPasswordSms($data)
+    {
+        //验证图形验证码
+        /*$res = \Captcha::checkCodeInfo('forget_password_code', $data['captcha_code']);
+        if (!$res) {
+            throw new ApiException('验证码错误');
+        }*/
+        //用户是否存在
+        $res = \App\Model\UserModel::where('is_on', '=', 1)
+            ->where('phone', '=', $data['phone'])
+            ->select(['id', 'phone'])
+            ->first();
+
+        if (!$res) {
+            throw new ApiException('无效账号!');
+        }
+
+        \App\Logic\SmsLogic::forgetPassword($data['phone']);
+
+        return true;
+    }
+
+    /**
+     * 发送找回密码发送邮箱验证码
+     * @param array $data 包含phone手机号码
+     * @return bool
+     * @throws ApiException
+     */
+    public static function sendForgetPasswordEmail($data)
+    {
+        //验证图形验证码
+        /*$res = \Captcha::checkCodeInfo('forget_password_code', $data['captcha_code']);
+        if (!$res) {
+            throw new ApiException('验证码错误');
+        }*/
+        //用户是否存在
+        $res = \App\Model\UserModel::where('is_on', '=', 1)
+            ->where('email', '=', $data['email'])
+            ->select(['id', 'email'])
+            ->first();
+
+        if (!$res) {
+            throw new ApiException('无效账号!');
+        }
+
+        \App\Logic\EmailLogic::forgetPassword($data['email']);
+
+        return true;
+    }
+
+    /**
+     * 发送绑定手机验证码
+     * @param array $data要发送验证码的数据
+     * @return bool
+     * @throws ApiException
+     */
+    public static function sendAddPhoneSms($data)
+    {
+        $user_id = \Jwt::get('user_info')['user_id'];
+
+        //用户是否存在
+        $res = \App\Model\UserModel::where('is_on', '=', 1)
+            ->select(['id', 'phone'])
+            ->find($user_id);
+
+        if (!$res) {
+            throw new ApiException('用户不存在!');
+        }
+
+        if (!empty($res->phone)) {
+            throw new ApiException('你已经绑定了手机!');
+        }
+
+        //手机是否已绑定
+        $res = \App\Model\UserModel::where('is_on', '=', 1)
+            ->where('phone', '=', $data['phone'])
+            ->select(['id', 'phone'])
+            ->first();
+
+        if ($res) {
+            throw new ApiException('该手机已绑定!');
+        }
+
+        \App\Logic\SmsLogic::addPhone($data['phone']);
+
+        return true;
+    }
+
+    /**
+     * 发送修改支付密码手机验证码短信
+     * @return bool
+     * @throws ApiException
+     */
+    public static function sendEditPayPasswordSms()
+    {
+        $user_id = \Jwt::get('user_info.user_id');
+
+        //用户是否存在
+        $res = \App\Model\UserModel::where('is_on', '=', 1)
+            ->select(['id', 'phone'])
+            ->find($user_id);
+
+        if (!$res) {
+            throw new ApiException('无效账号!');
+        }
+
+        if ($res->phone == 0) {
+            throw new ApiException('你还没有绑定手机!');
+        }
+
+        \App\Logic\SmsLogic::editPayPassword($res->phone);
+
+        return true;
+    }
+
+    /**
+     * 发送修改支付密码邮箱邮件
+     * @param array $data要发送验证码的数据
+     * @return bool
+     * @throws ApiException
+     */
+    public static function sendEditPayPasswordEmail()
+    {
+        $user_id = \Jwt::get('user_info')['user_id'];
+
+        //用户是否存在
+        $res = \App\Model\UserModel::where('is_on', '=', 1)
+            ->select(['id', 'email'])
+            ->find($user_id);
+
+        if (!$res) {
+            throw new ApiException('用户不存在!');
+        }
+
+        if (empty($res->email)) {
+            throw new ApiException('你还没有绑定了邮箱!');
+        }
+
+        \App\Logic\EmailLogic::editPayPassword($res->email);
+
+        return true;
+    }
+
+    /**
+     * 发送手机验证码
+     * @param array $type要发送验证码的类型
+     * @return bool
+     * @throws ApiException
+     */
+    public static function sendEditEmailMsg()
+    {
+        $user_id = \Jwt::get('user_info.user_id');
+
+        //用户是否存在
+        $res = \App\Model\UserModel::where('is_on', '=', 1)
+            ->select(['id', 'email'])
+            ->find($user_id);
+
+        if (!$res) {
+            throw new ApiException('用户不存在!');
+        }
+
+        if (!$res->email) {
+            throw new ApiException('用户邮箱不存在!');
+        }
+        $email = $res->email;
+
+        \App\Logic\EmailLogic::editEmail($email);
+        return true;
+    }
+
+    /**
+     * 发送手机验证码
+     * @param array $type要发送验证码的类型
+     * @return bool
+     * @throws ApiException
+     */
+    public static function sendEditNewEmailMsg($data)
+    {
+        $user_id = \Jwt::get('user_info.user_id');
+
+        //用户是否存在
+        $res = \App\Model\UserModel::where('is_on', '=', 1)
+            ->select(['id', 'email'])
+            ->find($user_id);
+
+        if (!$res) {
+            throw new ApiException('用户不存在!');
+        }
+
+        if (!$res->email) {
+            throw new ApiException('用户邮箱不存在!');
+        }
+
+        //验证邮箱
+        $res = \App\Model\UserModel::where('is_on', '=', 1)
+            ->where('email', ' = ', $data['email'])
+            ->select(['id', 'email'])
+            ->first();
+
+        if ($res) {
+            throw new ApiException('该邮箱已绑定!');
+        }
+
+        \App\Logic\EmailLogic::editNewEmail($data['email']);
+        return true;
+    }
+
+    /**
+     * 修改邮箱
+     * @param array $data 筛选数据
+     *        int $data.phone 手机
+     * @return bool
+     * @throws ApiException
+     */
+    public static function editEmail($data)
+    {
+        $user_id = \Jwt::get('user_info')['user_id'];
+
+        //判断用户
+        $user = \App\Model\UserModel::where('is_on', '=', 1)
+            ->select(['id', 'email'])
+            ->find($user_id);
+        if (!$user) {
+            throw new ApiException('用户不存在!');
+        }
+
+        if (empty($user->email)) {
+            throw new ApiException('你还没有绑定邮箱!');
+        }
+
+        //判断旧邮箱验证码是否正确
+        $verfy_data = array('email' => $user->email);
+        \JiaLeo\Laravel\Captcha\Custom::checkCaptcha('email_check:edit_email_code', $data['old_verification_code'], $verfy_data);
+
+        //判断新邮箱验证码是否正确
+        $verfy_data = array('email' => $data['email']);
+        \JiaLeo\Laravel\Captcha\Custom::checkCaptcha('email_check:edit_email_new_code', $data['new_verification_code'], $verfy_data);
+
+        //判断邮箱是否重复
+        $phone = \App\Model\UserModel::where('is_on', '=', 1)
+            ->where('email', '=', $data['email'])
+            ->select(['id'])
+            ->first();
+        if ($phone) {
+            throw new ApiException('该邮箱已绑定!');
+        }
+
+        set_save_data($user, ['email' => $data['email']]);
+        $update_res = $user->save();
+        if (!$update_res) {
+            throw new ApiException('数据错误!');
+        }
+
+        \JiaLeo\Laravel\Captcha\Custom::deleteCaptcha('email_check:edit_email_code');
+        \JiaLeo\Laravel\Captcha\Custom::deleteCaptcha('email_check:edit_email_new_code');
+
+        return true;
+    }
+
+    /**
+     * 判断是否设置了支付密码
+     * @return bool
+     * @throws ApiException
+     */
+    public static function judgeExistPayPassword()
+    {
+        $user_id = \Jwt::get('user_info.user_id');
+
+        //判断密码是否正确
+        $user = \App\Model\UserModel::where('is_on', '=', 1)
+            ->select(['id', 'pay_password', 'salt'])
+            ->with(['capitals' => function ($query) {
+                $query->select(['id', 'user_id', 'balance']);
+            }])
+            ->find($user_id);
+
+        if (empty($user->pay_password)) {
+            $data['is_exist_password'] = 0;
+
+        } else {
+            $data['is_exist_password'] = 1;
+        }
+
+        $data['balance'] = $user->capitals->balance;
+
+        return $data;
+    }
+
+    /**
+     * 解绑第三方授权
+     * @return \Illuminate\Http\JsonResponse
+     * @throws ApiException
+     */
+    public static function unbindAuth($data)
+    {
+
+        switch ($data['type']) {
+            case 'wechat' :
+                $oauth_type = 1;
+                $text = '微信';
+                $user_field = 'is_wechat';
+                break;
+            case 'qq' :
+                $oauth_type = 2;
+                $text = 'qq';
+                $user_field = 'is_qq';
+                break;
+            case 'weibo' :
+                $oauth_type = 3;
+                $text = '微博';
+                $user_field = 'is_weibo';
+                break;
+            default :
+                throw new ApiException('错误的类型!');
+        }
+
+        //判断用户是否绑定
+        $user_id = \Jwt::get('user_info.user_id');
+        $oauth_info = \App\Model\UserAuthOauthModel::where('user_id', $user_id)
+            ->where('oauth_type', $oauth_type)
+            ->select('id')
+            ->first();
+        if (!$oauth_info) {
+            throw new ApiException('你还没有绑定' . $text);
+        }
+
+        \DB::beginTransaction();
+        $update = \App\Model\UserAuthOauthModel::where('id', $oauth_info->id)
+            ->update(['user_id' => 0]);
+        if (!$update) {
+            \DB::rollBack();
+            throw new ApiException('数据库错误!');
+        }
+
+        $update = \App\Model\UserModel::where('id', $user_id)
+            ->update([$user_field => 0]);
+        if (!$update) {
+            \DB::rollBack();
+            throw new ApiException('数据库错误!');
+        }
+
+        \DB::commit();
+        return true;
+    }
+}

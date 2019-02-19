@@ -1,0 +1,91 @@
+<?php
+
+namespace App\Logic\Admin;
+
+use App\Exceptions\ApiException;
+
+
+class SmsLogic
+{
+
+    /**
+     * 短信日志列表
+     * @param array $data 筛选数据
+     *              $data.user_id 用户id
+     *              $data.admin_id 管理员id
+     *              $data.type //短信类型:1,注册 ;2,登录;3,修改密码;4,更换手机号;5,忘记密码; 6,更改支付密码; 7,绑定手机;
+     *              $data.start_time 时间区间-开始时间
+     *              $data.end_time 时间区间-结束时间
+     * @return \App\Model\LogSmsModel|\Illuminate\Database\Query\Builder
+     */
+    public static function getSmsList($data)
+    {
+        $list = \App\Model\LogSmsModel::where('is_on', '=', 1)
+            ->select(['id', 'user_id', 'admin_id', 'content', 'phone', 'type', 'created_at'])
+            ->orderBy('id', 'Desc');
+
+        if (isset($data['user_id'])) {
+            $list->where('user_id', '=', $data['user_id']);
+        }
+        if (isset($data['phone'])) {
+            $list->where('phone', 'like', '%' . $data['phone'] . '%');
+        }
+        //短信类型:1,注册 ;2,登录;3,修改密码;4,更换手机号;5,忘记密码; 6,更改支付密码; 7,绑定手机;
+        if (isset($data['type'])) {
+            $list->where('type', '=', $data['type']);
+        }
+        if (isset($data['start_time']) && isset($data['end_time'])) {
+            if ($data['start_time'] > $data['end_time']) {
+                throw new ApiException('数据错误');
+            }
+            $list->whereBetween('created_at', [$data['start_time'], $data['end_time']]);
+        }
+        $list = $list->paginate(15);
+
+        $list->each(function ($item) {
+            $item->type_name = self::transformType($item->type);
+        });
+
+        return $list;
+    }
+
+    /**
+     * 获取短信类型列表
+     * @return mixed
+     */
+    public static function getSmsType()
+    {
+        $config = \App\Model\ConfigModel::where('code', 'sms_type')
+            ->first(['value']);
+
+        $list = json_decode($config['value'], true);
+
+        return $list;
+    }
+
+    /**
+     * 转换短信类型
+     * @param $type
+     * @return string
+     */
+    public static function transformType($type)
+    {
+        switch ($type) {
+            case 1:
+                return '注册';
+            case 2:
+                return '登录';
+            case 3:
+                return '修改密码';
+            case 4:
+                return '更换手机号';
+            case 5:
+                return '忘记密码';
+            case 6:
+                return '更改支付密码';
+            case 7:
+                return '绑定手机';
+        }
+    }
+
+}

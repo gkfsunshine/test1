@@ -1,0 +1,64 @@
+<?php
+
+return [
+
+    // 注册服务器配置信息(注册服务器仅需要一台)
+    'register' => [
+        'host' => env('SWOOLE_REGISTER_HOST', '10.1.1.11'),      // 注册服务器IP地址
+        'port' => env('SWOOLE_REGISTER_PORT', '59999'),          // 注册服务器端口地址
+        'report_driver' => 'redis',                              // 上传报表驱动,redis
+        'is_gateway_report' => false,                            // gateway是否要上传报表数据
+        'is_worker_report' => false,                             // worker是否要上传报表数据
+        'is_register_report' => false,                           // register是否要上传报表数据
+    ],
+
+    // worker对外接口,用于接受MVC框架的tcp请求
+    // 请对内网worker的监听端口作负载均衡
+    'worker_info' => [
+        'host' => env('SWOOLE_WORKER_INFO_HOST', '10.1.1.11'),
+        'port' => env('SWOOLE_WORKER_INFO_PORT', '57999'),
+    ],
+
+    // gateway 服务器配置信息(根据实际情况,配置多台gateway机器)
+    'gateway' => [
+        'packet_setting_class' => '',                                                               // packet设置类,eg:array(\App\Socket\Setting::class, 'packetConfig')
+        'verify_websocket_class' => '',                                                             // websocket握手验证类,eg: array(\App\Socket\Setting::class, 'verifyWebsocket')
+        'gateway-001' => [                                                                          // gateway 机器配置索引(启动gateway时候指定)
+            'mac-name' => 'gateway-001',                                                            // gateway 机器配置名称
+            'type' => 'WebSocket',                                                                  // 选择对外的服务类型 WebSocket or Tcp
+            'external' => [                                                                         // 对外服务设置
+                'host' => env('SWOOLE_GATEWAY001_WEBSOCKET_HOST', '0.0.0.0'),                       // gateway 机器开启websocket的ip信息
+                'port' => env('SWOOLE_GATEWAY001_WEBSOCKET_PORT', '58999'),                         // gateway 机器开启websocket的端口信息
+            ],
+            'interior-tcp' => [                                                                     // 对内服务设置
+                'host' => env('SWOOLE_GATEWAY001_INTERIOR_TCP_HOST', '10.1.1.11'),                  // host主机地址请尽量填写内网地址,不对外网开发
+                'port' => env('SWOOLE_GATEWAY001_INTERIOR_TCP_PORT', '58998'),
+            ]
+        ],
+
+        //'gateway-002'     //gateway 机器配置索引(启动gateway时候指定)
+    ],
+
+    // worker 服务器配置信息(根据实际情况,配置多台worker机器)
+    // host主机地址请尽量填写内网地址,不对外网开发
+    'worker' => [
+        'events' => \App\Socket\Events::class,                              // worker 业务处理事件
+        'worker-001' => [                                                   // worker 机器配置索引(启动worker时候指定)
+            'mac-name' => 'worker-001',                                     // worker 机器配置名称
+            'tcp' => [                                                      // worker 机器开启tcp的配置信息
+                'host' => env('SWOOLE_WORKER001_TCP_HOST', '10.1.1.11'),    // worker 机器开启tcp的ip信息
+                'port' => env('SWOOLE_WORKER001_TCP_PORT', '57999'),        // worker 机器开启tcp的端口信息
+            ],
+        ],
+
+        // 建议每台机器只开一个worker程序
+        // 根据cpu数量和业务逻辑复杂度指定对应的worker_num
+        'worker-002' => [
+            'mac-name' => 'worker-002',                                      // worker 机器配置索引(启动worker时候指定)
+            'tcp' => [                                                       // worker 机器开启tcp的配置信息
+                'host' => env('SWOOLE_WORKER002_TCP_HOST', '10.1.1.11'),     // worker 机器开启tcp的ip信息
+                'port' => env('SWOOLE_WORKER002_TCP_PORT', '57700'),         // worker 机器开启tcp的端口信息
+            ],
+        ]
+    ],
+];

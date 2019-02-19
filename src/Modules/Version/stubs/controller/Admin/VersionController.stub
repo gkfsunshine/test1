@@ -1,0 +1,157 @@
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+
+class VersionController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function index()
+    {
+        //
+        $this->verify([
+            'type' => 'in:1:2|no_required',
+        ], 'GET');
+
+        $list = \App\Logic\Admin\VersionLogic::getVersionList($this->verifyData);
+
+        return $this->responseList($list);
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
+    {
+        //
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(Request $request)
+    {
+        //
+        $this->verify([
+            'type' => 'in:1:2',
+            'version' => '',
+            'version_num' => 'egnum',
+            'download_url' => '',
+            'content' => '',
+            'is_coerce' => 'in:0:1',
+            'is_remind' => 'in:0:1',
+            'is_external' => 'in:0:1',
+            'upload_id' => 'egnum|no_required'
+        ], 'POST');
+
+        $data = $this->verifyData;
+
+        \App\Logic\Admin\VersionLogic::addVersion($data);
+
+        return $this->response();
+    }
+
+    /**
+     * Display the specified resource.
+     *
+     * @param int $id
+     * @return \Illuminate\Http\Response
+     */
+    public function show($id)
+    {
+        $this->verifyId($id);
+
+        $data = \App\Logic\Admin\VersionLogic::getOneVersion($id);
+
+        return $this->response($data);
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param int $id
+     * @return \Illuminate\Http\Response
+     */
+    public function edit($id)
+    {
+        $this->verifyId($id);
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request $request
+     * @param int $id
+     * @return \Illuminate\Http\Response
+     */
+    public function update(Request $request, $id)
+    {
+        $this->verifyId($id);
+        $this->verify([
+            'version' => 'no_required',
+            'download_url' => 'no_required',
+            'content' => 'no_required',
+            'is_coerce' => 'in:0:1|no_required',
+            'is_remind' => 'in:0:1|no_required',
+            'is_external' => 'in:0:1|no_required',
+            'upload_id' => 'egnum|no_required'
+        ], 'POST');
+
+        \App\Logic\Admin\VersionLogic::updateVersion($this->verifyData, $id);
+
+        return $this->response();
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param int $id
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy($id)
+    {
+        $this->verifyId($id);
+
+        \App\Logic\Admin\VersionLogic::deleteVersion($id);
+
+        return $this->response();
+    }
+
+    /**
+     * 获取APP介绍说明
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getAppInstructions()
+    {
+        $data = \App\Logic\Admin\VersionLogic::getAppInstructions();
+
+        return $this->response($data);
+    }
+
+
+    /**
+     * 保存APP介绍说明
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function postAppInstructions()
+    {
+        $this->verify([
+            'app_instructions' => ''
+        ], 'POST');
+
+        $data = \App\Logic\Admin\VersionLogic::postAppInstructions($this->verifyData);
+
+        return $this->response($data);
+    }
+}

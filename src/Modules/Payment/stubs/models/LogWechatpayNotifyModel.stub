@@ -1,0 +1,102 @@
+<?php
+namespace App\Model;
+
+use Illuminate\Database\Eloquent\Model;
+
+
+/**
+ * Model LogWechatpayNotifyModel
+ *
+ * @property int $id
+ * @property string $return_code
+ * @property string $return_msg
+ * @property string $result_code
+ * @property string $err_code
+ * @property string $err_code_des
+ * @property string $appid
+ * @property string $mch_id
+ * @property string $device_info
+ * @property string $nonce_str
+ * @property string $sign
+ * @property string $sign_type
+ * @property string $openid
+ * @property int $is_subscribe
+ * @property string $trade_type
+ * @property string $bank_type
+ * @property int $total_fee
+ * @property int $settlement_total_fee
+ * @property string $fee_type
+ * @property int $cash_fee
+ * @property string $cash_fee_type
+ * @property string $transaction_id
+ * @property string $out_trade_no
+ * @property string $attach
+ * @property string $time_end
+ * @property string $raw_data
+ * @property int $deal_status
+ * @property string $error_msg
+ * @property int $created_at
+ * @property int $updated_at
+ *
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogWechatpayNotifyModel where($column, $operator = null, $value = null, $boolean = 'and')
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogWechatpayNotifyModel whereIn($column, $values, $boolean = 'and', $not = false)
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogWechatpayNotifyModel leftJoin($table, $first, $operator = null, $second = null)
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogWechatpayNotifyModel rightJoin($table, $first, $operator = null, $second = null)
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogWechatpayNotifyModel get($columns = ['*'])
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogWechatpayNotifyModel paginate($perPage = 15, $columns = ['*'], $pageName = 'page', $page = null)
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogWechatpayNotifyModel find($id, $columns = ['*'])
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogWechatpayNotifyModel first($columns = ['*'])
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogWechatpayNotifyModel select($columns = ['*'])
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogWechatpayNotifyModel orderBy($column, $direction = 'asc')
+ * @package App\Model
+ */
+class LogWechatpayNotifyModel extends Model
+{
+    protected $table = 'log_wechatpay_notify';
+
+    //定义为毫秒时间戳
+    protected $dateFormat = 'Uv';
+
+
+    //获取created_at字段时处理
+    public function getCreatedAtAttribute($value)
+    {
+        if(is_string($value)){
+            return (int)($value / 1000);
+        }
+
+        return $value;
+    }
+
+    //获取updated_at字段时处理
+    public function getUpdatedAtAttribute($value)
+    {
+        if(is_string($value)){
+            return (int)($value / 1000);
+        }
+
+        return $value;
+    }
+
+    //不需要记录created_at或updated_at
+    //protected $timestamps = false;
+
+    protected $casts = [
+        'id' => 'string',   //把id返回字符串
+    ];
+
+    /**
+     * 获取对应数据库链接对象
+     * @eg 用于分库分表时获取数据所在的数据库对象
+     * @param $id
+     * @return object
+     */
+    /*public static function getShardingConnection($id)
+    {
+        $mod = $id % 4;
+        $model = '\App\Model\Mysql2\User_'.$mod.'Model';
+
+        return new $model;
+    }*/
+
+}

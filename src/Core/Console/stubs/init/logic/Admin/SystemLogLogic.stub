@@ -1,0 +1,84 @@
+<?php
+namespace App\Logic\Admin;
+
+use App\Exceptions\ApiException;
+
+class SystemLogLogic
+{
+
+    /**
+     * 获取日志列表
+     * @param $data array
+     *        $data.admin_name 管理员名称
+     *        $data.keyword 关键字
+     *        $data.phone 管理员手机号码
+     *        $data.start_time
+     *        $data.end_time
+     */
+    public static function getSystemLogList($data)
+    {
+        $list = \App\Model\LogAdminActionModel::leftJoin('admin_user', 'log_admin_action.admin_id', '=', 'admin_user.id')
+            ->select('log_admin_action.id', 'admin_id', 'code', 'name', 'phone', 'content', 'data', 'ip', 'log_admin_action.created_at')
+            ->orderBy('log_admin_action.id','desc');
+
+        //筛选admin_id
+        if (isset($data['admin_name'])) {
+            $list->where('admin_user.name', 'like', '%' . $data['admin_name'] . '%');
+        }
+
+        //筛选关键字
+        if (isset($data['keyword'])) {
+            $list->where('content', 'like', '%' . $data['keyword'] . '%');
+        }
+
+        //筛选管理员手机号码
+        if (isset($data['phone'])) {
+            $list->where('phone', $data['phone']);
+        }
+
+        //筛选创建时间
+        if (isset($data['start_time']) && isset($data['end_time'])) {
+            $list->whereBetween('log_admin_action.created_at', [$data['start_time'], $data['end_time']]);
+        }
+
+        $list = $list->paginate();
+
+        $list->each(function ($item) {
+            $item->ip = long2ip($item->ip);
+        });
+
+        return $list;
+    }
+
+    /**
+     * 添加管理员系统日志
+     * @param $text
+     * @param array $data
+     * @throws ApiException
+     */
+    public static function addSystemLog($text, $data = [])
+    {
+        load_helper('Network');
+
+        $route_info = \Route::getCurrentRoute();
+        $current_key = str_replace($route_info->action['namespace'] . '\Admin\\', '', $route_info->action['controller']);
+
+        $save_data = array(
+            'admin_id' => \Jwt::get('admin_info.admin_id'),
+            'content' => $text,
+            'data' => json_encode($data,JSON_UNESCAPED_UNICODE),
+            'code' => $current_key,
+            'ip' => get_client_ip()
+        );
+
+        $log_admin_action_model = new \App\Model\LogAdminActionModel();
+        set_save_data($log_admin_action_model, $save_data);
+        $save = $log_admin_action_model->save();
+
+        if (!$save) {
+            throw new ApiException('数据库错误!');
+        }
+    }
+
+
+}

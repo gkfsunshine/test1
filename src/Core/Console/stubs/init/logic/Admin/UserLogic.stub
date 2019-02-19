@@ -1,0 +1,155 @@
+<?php
+namespace App\Logic\Admin;
+
+use App\Exceptions\ApiException;
+
+class UserLogic
+{
+
+    /**
+     * 获取用户列表
+     * @param $data array 筛选数组
+     *        $data.email
+     *        $data.username
+     *        $data.start_time
+     *        $data.end_time
+     *        $data.status
+     *        $data.phone
+     * @return $this|\App\Model\UserModel|\Illuminate\Contracts\Pagination\LengthAwarePaginator|\Illuminate\Database\Query\Builder
+     */
+    public static function getUserList($data)
+    {
+        $list = \App\Model\UserModel::where('is_on', 1)
+            ->select(['id', 'email', 'username', 'phone', 'headimg', 'status', 'last_login_ip', 'last_login_time', 'created_at'])
+            ->orderBy('id', 'DESC');
+
+        //筛选邮件
+        if (isset($data['email'])) {
+            $list->where('email', 'like', '%' . $data['email'] . '%');
+        }
+
+        //筛选用户名
+        if (isset($data['username'])) {
+            $list->where('username', 'like', '%' . $data['username'] . '%');
+        }
+
+        //筛选状态
+        if (isset($data['status'])) {
+            $list->where('status', $data['status']);
+        }
+
+        //筛选手机
+        if (isset($data['phone'])) {
+            $list->where('phone', $data['phone']);
+        }
+
+        //筛选创建时间
+        if (isset($data['start_time']) && isset($data['end_time'])) {
+            $list->whereBetween('created_at', [$data['start_time'], $data['end_time']]);
+        }
+
+        if (isset($data['export']) && $data['export'] == 1) {
+            //导出excel
+            self::exportUserToExcel($list);
+        } else {
+            $list = $list->paginate();
+        }
+
+        load_helper('File');
+
+        $list->each(function ($item) {
+            //转换头像
+            $item->headimg = auto_url($item->headimg);
+
+            //转换ip
+            $item->last_login_ip = long2ip($item->last_login_ip);
+        });
+
+        return $list;
+    }
+
+    /**
+     * 导出用户列表excel
+     * @param $list object 列表数据
+     */
+    public static function exportUserToExcel($list)
+    {
+        $list = $list->get();
+
+        $export_data = array(
+
+            array(
+                '用户名', '手机', '邮箱', '最后登录ip', '最后登录时间', '创建时间'
+            )
+        );
+
+        $list->each(function ($item) use (&$export_data) {
+
+            $data = array(
+                $item->username,
+                $item->phone,
+                $item->email,
+                $item->last_login_ip == 0 ? '-' : long2ip($item->last_login_ip),
+                $item->last_login_time == 0 ? '-' : get_msec_to_mescdate($item->last_login_time, 'Y-m-d H:i:s'),
+                $item->created_at == 0 ? '-' : date('Y-m-d H:i:s', $item->created_at),
+            );
+
+            $export_data[] = $data;
+        });
+
+        //浏览器直接输出
+        \Excel::export('aaaa', $export_data, true);
+    }
+
+    /**
+     * 获取单个用户
+     * @param $id
+     * @return \App\Model\UserModel|\Illuminate\Database\Query\Builder|mixed|static
+     * @throws ApiException
+     */
+    public static function getOneUser($id)
+    {
+        $res = \App\Model\UserModel::where('is_on', 1)
+            ->select(['id', 'phone', 'email', 'username', 'headimg', 'status', 'last_login_ip', 'last_login_time', 'created_at'])
+            ->find($id);
+
+        if (!$res) {
+            throw new ApiException('会员不存在!');
+        }
+
+        load_helper('File');
+
+        //转换头像
+        $res->headimg = auto_url($res->headimg);
+
+        //转换ip
+        $res->last_login_ip = long2ip($res->last_login_ip);
+
+        return $res;
+    }
+
+    /**
+     * 更新单个用户
+     * @param $data
+     * @param $id
+     * @return \App\Model\UserModel|\Illuminate\Database\Query\Builder|mixed|static
+     * @throws ApiException
+     */
+    public static function updateUser($data,$id){
+        $res = \App\Model\UserModel::where('is_on', 1)
+            ->select(['id', 'phone', 'email', 'username', 'headimg', 'status', 'last_login_ip', 'last_login_time', 'created_at'])
+            ->find($id);
+
+        if (!$res) {
+            throw new ApiException('会员不存在!');
+        }
+
+        set_save_data($res,$data);
+        $update=$res->save();
+        if(!$update){
+            throw new ApiException('数据库错误!');
+        }
+
+        return true;
+    }
+}

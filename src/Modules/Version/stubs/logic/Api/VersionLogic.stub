@@ -1,0 +1,44 @@
+<?php
+
+namespace App\Logic\Api;
+
+use App\Exceptions\ApiException;
+
+class VersionLogic
+{
+    /**
+     * 获取当前版本
+     * @param $data
+     * @return array
+     */
+    public static function getCurrentVersion($data)
+    {
+
+        $return = array(
+            'is_update' => false,
+            'update_info' => []
+        );
+
+        //查询最新id
+        $version = \App\Model\VersionModel::where('is_on', 1)
+            ->where('type', $data['type'])
+            ->orderBy('version_num', 'DESC')
+            ->select('version', 'version_num', 'download_url', 'content', 'is_remind', 'is_coerce', 'is_external')
+            ->first();
+
+        if ($version['is_external'] == 1) {
+            load_helper('File');
+            $version['download_url'] = auto_url($version['download_url']);
+        }
+
+        if ($version && $version->version_num > $data['version']) {
+            $return = array(
+                'is_update' => true,
+                'update_info' => $version
+            );
+        }
+
+        return $return;
+    }
+
+}

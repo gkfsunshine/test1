@@ -1,0 +1,26 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+
+class VersionController extends Controller
+{
+    /**
+     * 获取当前版本
+     * @return \Illuminate\Http\JsonResponse
+     * @throws \App\Exceptions\ApiException
+     */
+    public function getCurrentVersion()
+    {
+        $this->verify([
+            'version' => 'egnum',
+            'type' => 'in:1:2'
+        ], 'GET');
+
+        $data = \App\Logic\Api\VersionLogic::getCurrentVersion($this->verifyData);
+
+        return $this->response($data);
+    }
+}

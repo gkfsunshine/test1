@@ -1,0 +1,168 @@
+<?php
+namespace App\Logic;
+
+use App\Exceptions\ApiException;
+
+class EmailLogic
+{
+
+    /**
+     * 注册逻辑
+     * @return bool
+     */
+    public static function register($email)
+    {
+        $code = \JiaLeo\Laravel\Captcha\Custom::generateMsgAuthCode(6);
+        $data = array(
+            'email' => $email
+        );
+        \JiaLeo\Laravel\Captcha\Custom::setCaptcha('email_check:register_code', $code, $data, 60);
+
+        try {
+            \Mail::to($email)->send(new \App\Mail\Register($code));
+        } catch (\Exception $e) {
+            throw new ApiException($e->getMessage());
+        }
+        return true;
+    }
+
+    /**
+     * 登录逻辑
+     * @return bool
+     */
+    public static function login($email)
+    {
+        $code = \JiaLeo\Laravel\Captcha\Custom::generateMsgAuthCode(6);
+        $data = array(
+            'email' => $email
+        );
+        \JiaLeo\Laravel\Captcha\Custom::setCaptcha('email_check:login_code', $code, $data, 60);
+
+        try {
+            \Mail::to($email)->send(new \App\Mail\Login($code));
+        } catch (\Exception $e) {
+            throw new ApiException($e->getMessage());
+        }
+        return true;
+    }
+
+    /**
+     * 绑定邮箱
+     * @return bool
+     */
+    public static function addEmail($email)
+    {
+        $code = \JiaLeo\Laravel\Captcha\Custom::generateMsgAuthCode(6);
+        $data = array(
+            'email' => $email
+        );
+        \JiaLeo\Laravel\Captcha\Custom::setCaptcha('email_check:add_email_code', $code, $data, 60);
+
+        try {
+            \Mail::to($email)->send(new \App\Mail\AddEmail($code));
+        } catch (\Exception $e) {
+            throw new ApiException($e->getMessage());
+        }
+        return true;
+    }
+
+    /**
+     * 修改邮箱(发送旧邮箱)
+     * @return bool
+     */
+    public static function editEmail($email)
+    {
+        $code = \JiaLeo\Laravel\Captcha\Custom::generateMsgAuthCode(6);
+        $data = array(
+            'email' => $email
+        );
+        \JiaLeo\Laravel\Captcha\Custom::setCaptcha('email_check:edit_email_code', $code, $data, 60);
+
+        try {
+            \Mail::to($email)->send(new \App\Mail\AddEmail($code));
+        } catch (\Exception $e) {
+            throw new ApiException($e->getMessage());
+        }
+        return true;
+    }
+
+    /**
+     * 修改邮箱(发送新邮箱)
+     * @return bool
+     */
+    public static function editNewEmail($email)
+    {
+        $code = \JiaLeo\Laravel\Captcha\Custom::generateMsgAuthCode(6);
+        $data = array(
+            'email' => $email
+        );
+        \JiaLeo\Laravel\Captcha\Custom::setCaptcha('email_check:edit_email_new_code', $code, $data, 60);
+
+        try {
+            \Mail::to($email)->send(new \App\Mail\AddEmail($code));
+        } catch (\Exception $e) {
+            throw new ApiException($e->getMessage());
+        }
+        return true;
+    }
+
+    /**
+     * 修改支付密码
+     * @return bool
+     */
+    public static function editPayPassword($email)
+    {
+        $code = \JiaLeo\Laravel\Captcha\Custom::generateMsgAuthCode(6);
+        $data = array(
+            'email' => $email
+        );
+        \JiaLeo\Laravel\Captcha\Custom::setCaptcha('email_check:edit_pay_password_code', $code, $data, 60);
+
+        try {
+            \Mail::to($email)->send(new \App\Mail\EditPayPassword($code));
+        } catch (\Exception $e) {
+            throw new ApiException($e->getMessage());
+        }
+        return true;
+    }
+
+    /**
+     * 修改登录密码
+     * @return bool
+     */
+    public static function editPassword($email)
+    {
+        $code = \JiaLeo\Laravel\Captcha\Custom::generateMsgAuthCode(6);
+        $data = array(
+            'email' => $email
+        );
+        \JiaLeo\Laravel\Captcha\Custom::setCaptcha('email_check:edit_password_code', $code, $data, 60);
+
+        try {
+            \Mail::to($email)->send(new \App\Mail\EditPassword($code));
+        } catch (\Exception $e) {
+            throw new ApiException($e->getMessage());
+        }
+        return true;
+    }
+
+    /**
+     * 忘记密码
+     * @return bool
+     */
+    public static function forgetPassword($email)
+    {
+        $code = \JiaLeo\Laravel\Captcha\Custom::generateMsgAuthCode(6);
+        $data = array(
+            'email' => $email
+        );
+        \JiaLeo\Laravel\Captcha\Custom::setCaptcha('email_check:forget_password_code', $code, $data, 60);
+
+        try {
+            \Mail::to($email)->send(new \App\Mail\ForgetPassword($code));
+        } catch (\Exception $e) {
+            throw new ApiException($e->getMessage());
+        }
+        return true;
+    }
+}

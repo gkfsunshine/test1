@@ -1,0 +1,44 @@
+<?php
+
+/*
+|--------------------------------------------------------------------------
+| API Routes
+|--------------------------------------------------------------------------
+|
+| Here is where you can register API routes for your application. These
+| routes are loaded by the RouteServiceProvider within a group which
+| is assigned the "api" middleware group. Enjoy building your API!
+|
+*/
+
+//测试
+Route::get('test', 'Api\TestController@index');
+
+//前台上传文件
+Route::post('upload/cloud/callbacks', 'Api\UploadController@uploadCallback');
+
+//需要验证session的
+Route::group(['middleware' => ['JwtAuth']], function () {
+
+    //文章
+    Route::get('articles', 'Api\ArticleController@index');
+    Route::get('articles/{id}', 'Api\ArticleController@show');
+
+    //获取地区
+    Route::get('areas', 'Api\AreaController@index');
+
+    //前台api
+    Route::group(['middleware' => ['ApiCheck']], function () {
+
+        /*--- 上传 ---*/
+        //获取上传设置
+        Route::post('uploads', 'Api\UploadController@getUploadID');
+        //本地上传文件
+        Route::post('upload/files', 'Api\UploadController@upload');
+        //本地上传完成请求
+        Route::put('upload/local/completes/{id}', 'Api\UploadController@putLocalUploadComplete');
+        //云上传完成请求
+        Route::put('upload/cloud/completes/{id}', 'Api\UploadController@putCloudUploadComplete');
+
+    });
+});

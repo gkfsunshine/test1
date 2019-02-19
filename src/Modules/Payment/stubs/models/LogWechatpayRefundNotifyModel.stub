@@ -1,0 +1,100 @@
+<?php
+namespace App\Model;
+
+use Illuminate\Database\Eloquent\Model;
+
+
+/**
+ * Model LogWechatpayRefundNotifyModel
+ *
+ * @property int $id
+ * @property string $return_code
+ * @property string $return_msg
+ * @property string $result_code
+ * @property string $err_code
+ * @property string $err_code_des
+ * @property string $appid
+ * @property string $mch_id
+ * @property string $nonce_str
+ * @property string $req_info
+ * @property string $out_refund_no
+ * @property string $out_trade_no
+ * @property string $refund_account
+ * @property string $refund_recv_accout
+ * @property int $refund_fee
+ * @property string $refund_id
+ * @property string $refund_request_source
+ * @property string $refund_status
+ * @property int $settlement_refund_fee
+ * @property int $settlement_total_fee
+ * @property string $success_time
+ * @property int $total_fee
+ * @property string $transaction_id
+ * @property string $raw_data
+ * @property int $deal_status
+ * @property string $error_msg
+ * @property int $created_at
+ * @property int $updated_at
+ *
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogWechatpayRefundNotifyModel where($column, $operator = null, $value = null, $boolean = 'and')
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogWechatpayRefundNotifyModel whereIn($column, $values, $boolean = 'and', $not = false)
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogWechatpayRefundNotifyModel leftJoin($table, $first, $operator = null, $second = null)
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogWechatpayRefundNotifyModel rightJoin($table, $first, $operator = null, $second = null)
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogWechatpayRefundNotifyModel get($columns = ['*'])
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogWechatpayRefundNotifyModel paginate($perPage = 15, $columns = ['*'], $pageName = 'page', $page = null)
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogWechatpayRefundNotifyModel find($id, $columns = ['*'])
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogWechatpayRefundNotifyModel first($columns = ['*'])
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogWechatpayRefundNotifyModel select($columns = ['*'])
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogWechatpayRefundNotifyModel orderBy($column, $direction = 'asc')
+ * @package App\Model
+ */
+class LogWechatpayRefundNotifyModel extends Model
+{
+    protected $table = 'log_wechatpay_refund_notify';
+
+    //定义为毫秒时间戳
+    protected $dateFormat = 'Uv';
+
+
+    //获取created_at字段时处理
+    public function getCreatedAtAttribute($value)
+    {
+        if(is_string($value)){
+            return (int)($value / 1000);
+        }
+
+        return $value;
+    }
+
+    //获取updated_at字段时处理
+    public function getUpdatedAtAttribute($value)
+    {
+        if(is_string($value)){
+            return (int)($value / 1000);
+        }
+
+        return $value;
+    }
+
+    //不需要记录created_at或updated_at
+    //protected $timestamps = false;
+
+    protected $casts = [
+        'id' => 'string',   //把id返回字符串
+    ];
+
+    /**
+     * 获取对应数据库链接对象
+     * @eg 用于分库分表时获取数据所在的数据库对象
+     * @param $id
+     * @return object
+     */
+    /*public static function getShardingConnection($id)
+    {
+        $mod = $id % 4;
+        $model = '\App\Model\Mysql2\User_'.$mod.'Model';
+
+        return new $model;
+    }*/
+
+}

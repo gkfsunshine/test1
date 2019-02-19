@@ -1,0 +1,84 @@
+<?php
+
+use Illuminate\Http\Request;
+
+/*
+|--------------------------------------------------------------------------
+| ADMIN Routes
+|--------------------------------------------------------------------------
+|
+| Here is where you can register API routes for your application. These
+| routes are loaded by the RouteServiceProvider within a group which
+| is assigned the "api" middleware group. Enjoy building your API!
+|
+*/
+
+/** 管理平台api **/
+
+//后台上传文件
+Route::any('upload/cloud/callbacks', 'Admin\UploadController@uploadCallback');
+
+//需要验证session的
+Route::group(['middleware' => ['JwtAuth', 'AdminLog']], function () {
+
+    //获取session状态
+    Route::get('status', 'Admin\AdminUserSelfController@status');
+
+    //登录注销操作
+    Route::post('logins', 'Admin\LoginController@store')->name('title:登录到管理后台');
+    Route::get('login/captchas', 'Admin\LoginController@loginLockedCaptcha');
+    Route::delete('logins', 'Admin\LoginController@destroy')->name('title:注销登录');
+
+    // 验证登录
+    Route::group(['middleware' => ['AdminCheck']], function () {
+
+        //获取菜单
+        Route::get('auth/menu/availables', 'Admin\AdminMenuAvailableController@index');
+
+        //管理员资料
+        Route::put('auth/user/selfs', 'Admin\AdminUserSelfController@update')->name('title:更新个人资料');
+        Route::get('auth/user/selfs', 'Admin\AdminUserSelfController@index');
+
+        //上传
+        Route::post('uploads', 'Admin\UploadController@getUploadID')->name('title:上传文件-第一步');
+        Route::post('upload/files', 'Admin\UploadController@upload')->name('title:上传文件到本地-第二步');
+        Route::put('upload/local/completes/{id}', 'Admin\UploadController@putLocalUploadComplete')->name('title:完成上传文件到本地-第三步');
+        Route::put('upload/cloud/completes/{id}', 'Admin\UploadController@putCloudUploadComplete')->name('title:完成上传文件到云盘-第三步');
+
+        //编辑器
+        Route::any('editor', 'Admin\EditorController@index');
+
+        /*
+        |-------------------
+        | 需要权限验证的
+        |-------------------
+        */
+        Route::group(['middleware' => ['AdminAuth']], function () {
+            //管理员模块
+            Route::resource('auth/users', 'Admin\AdminUserController', ['as' => 'name:管理员管理:管理员|menu:管理员管理:管理员列表']);
+            Route::resource('auth/roles', 'Admin\AdminRoleController', ['as' => 'name:管理员管理:角色|menu:管理员管理:角色列表']);
+            Route::resource('auth/permissions', 'Admin\AdminPermissionController', ['as' => 'name:管理员管理:权限|menu:管理员管理:权限组列表']);
+            Route::resource('auth/role/permissions', 'Admin\AdminRolePermissionController', ['as' => 'name:管理员管理:角色权限']);
+            Route::resource('auth/menus', 'Admin\AdminMenuController', ['as' => 'name:管理员管理:菜单|menu:管理员管理:菜单组列表']);
+            Route::resource('auth/permission/menus', 'Admin\AdminPermissionMenuController', ['as' => 'name:管理员管理:权限菜单']);
+            Route::get('log/action', 'Admin\SystemLogController@index')->name('name:管理员管理:管理员操作日志列表|menu:管理员管理:管理员操作日志');   //日志
+
+            //文章模块
+            Route::resource('article/categorys', 'Admin\ArticleCategoryController', ['as' => 'name:文章管理:文章分类|menu:文章管理:文章分类']);
+            Route::resource('articles', 'Admin\ArticleController', ['as' => 'name:文章管理:文章|menu:文章管理:文章列表']);
+            Route::resource('article/tags', 'Admin\ArticleTagController', ['as' => 'name:文章管理:文章标签|menu:文章管理:文章标签']);
+
+            //短信模块
+            Route::get('sms', 'Admin\SmsController@index')->name('name:短信日志:短信日志列表|menu:日志管理:短信日志');      //短信日志列表
+            Route::get('get/sms/type', 'Admin\SmsController@getSmsType')->name('name:短信日志:短信日志类型');             //短信类型列表
+
+            // 配置模块
+            Route::get('configs', 'Admin\ConfigController@index')->name('name:系统设置:基础设置列表|menu:系统设置:基础设置');
+            Route::put('configs/{id}', 'Admin\ConfigController@update')->name('name:系统设置:更新基础设置');
+
+            //会员模块
+            Route::resource('users', 'Admin\UserController', ['as' => 'name:会员管理:会员|menu:会员管理:会员列表']);
+
+        });
+    });
+});

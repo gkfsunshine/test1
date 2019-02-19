@@ -1,0 +1,150 @@
+<?php
+namespace App\Http\Controllers\Pay;
+
+use App\Exceptions\ApiException;
+use App\Http\Controllers\Controller;
+
+class WechatpayNotifyController extends Controller
+{
+    /**
+     * 微信支付回调
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function payNotify($device)
+    {
+        if ($device == 'mp' || $device == 'h5' || $device == 'native') {
+            $config = config('payment.wechatpay.all');
+        } elseif ($device == 'app') {
+            $config = config('payment.wechatpay.app');
+        } else {
+            \Log::error('微信回调类型有误!');
+            exit;
+        }
+
+        $wechatpay = new \JiaLeo\Payment\Wechatpay\Notify($config);
+
+        $result = false;
+        $log_error_msg = '';
+        $data = array();
+
+        try {
+            //验签
+            $data = $wechatpay->handle();
+            if (!$data) {
+                throw new ApiException('回调数据异常!错误内容:' . $wechatpay->errorMsg);
+            }
+
+            //验证单号是否正确
+            $log_wechatpay_pay_model = \App\Logic\Pay\WechatpayNotifyLogic::checkOutTradeNo($data);
+
+            \DB::beginTransaction();
+
+            //处理业务逻辑(业务一定要开事务,且务必不要提交)
+            //TODO
+            \App\Logic\Pay\WechatpayNotifyLogic::dealNotify($data, $log_wechatpay_pay_model, $wechatpay);
+
+            //更改单号状态
+            set_save_data($log_wechatpay_pay_model, ['status' => 1, 'dealed_at' => time()]);
+            $res = $log_wechatpay_pay_model->save();
+            if (!$res) {
+                throw new ApiException('修改支付处理状态失败!');
+            }
+
+            //尝试提交
+            \DB::commit();
+
+            $wechatpay->returnSuccess();
+            $result = true;
+
+        } catch (\Exception $e) {
+
+            //尝试回滚
+            \DB::rollBack();
+
+            $error_msg = $e->getMessage();
+            $error_line = $e->getLine();
+            $error_file = $e->getFile();
+
+            $log_error_msg = '支付回调错误: ' . $error_file . ' 行数:' . $error_line . ':' . $error_msg;
+            \Log::error($log_error_msg);
+            $wechatpay->returnFailure($error_msg);
+        }
+
+        $data['raw_data'] = json_encode($wechatpay->rawData);
+
+        //记录回调日志
+        \App\Logic\Pay\WechatpayNotifyLogic::addWechatpayNotifyLog($data, $result, $log_error_msg);
+        exit;
+    }
+
+    /**
+     * 退款回调
+     * @param $device
+     */
+    public function refundNotify($device)
+    {
+        if ($device == 'mp') {
+            $config = config('payment.wechatpay.mp');
+        } elseif ($device == 'app') {
+            $config = config('payment.wechatpay.app');
+        } else {
+            \Log::info('微信退款回调类型有误!');
+            exit;
+        }
+
+        $wechatpay = new \JiaLeo\Payment\Wechatpay\RefundNotify($config);
+
+        $result = false;
+        $log_error_msg = '';
+        $data = array();
+
+        try {
+            //验签
+            $data = $wechatpay->handle();
+            if (!$data) {
+                throw new ApiException('回调数据异常!');
+            }
+
+            //验证单号是否正确
+            $log_wechatpay_refund_model = \App\Logic\Pay\WechatpayNotifyLogic::checkRefundOutTradeNo($data);
+
+            \DB::beginTransaction();
+
+            //处理业务逻辑(业务一定要开事务,且务必不要提交)
+            //TODO
+            \App\Logic\Pay\WechatpayNotifyLogic::dealRefundNotify($data, $log_wechatpay_refund_model, $wechatpay);
+
+            //更改单号状态
+            set_save_data($log_wechatpay_refund_model, ['status' => 1, 'dealed_at' => time()]);
+            $res = $log_wechatpay_refund_model->save();
+            if (!$res) {
+                throw new ApiException('修改退款支付处理状态失败!');
+            }
+
+            //尝试提交
+            \DB::commit();
+
+            $wechatpay->returnSuccess();
+            $result = true;
+
+        } catch (\Exception $e) {
+            //尝试回滚
+            \DB::rollBack();
+
+            $error_msg = $e->getMessage();
+            $error_line = $e->getLine();
+            $error_file = $e->getFile();
+
+            $log_error_msg = '支付回调错误: ' . $error_file . ' 行数:' . $error_line . ':' . $error_msg;
+            \Log::error($log_error_msg);
+            $wechatpay->returnFailure($error_msg);
+        }
+
+        $data['raw_data'] = json_encode($wechatpay->rawData);
+
+        //记录回调日志
+        \App\Logic\Pay\WechatpayNotifyLogic::addWechatpayRefundNotifyLog($data, $result, $log_error_msg);
+    }
+
+}

@@ -1,0 +1,89 @@
+<?php
+namespace App\Logic\Pay;
+
+use App\Exceptions\ApiException;
+
+class AlipayNotifyLogic
+{
+
+    /**
+     * 检查回调单号
+     * @param $data
+     *          out_trade_no
+     *          total_amount
+     *          passback_params
+     * @return \App\Model\LogAlipayPayModel|\Illuminate\Database\Query\Builder|mixed
+     * @throws ApiException
+     */
+    public static function checkOutTradeNo($data)
+    {
+        //查询支付
+        $is_order = \App\Model\LogAlipayPayModel::where('out_trade_no', $data['out_trade_no'])
+            ->first();
+
+        if (!$is_order) {
+            throw new ApiException('找不到单号!');
+        }
+
+        //判断是否已处理
+        if ($is_order['status'] == 1) {
+            throw new ApiException('单号已处理!');
+        }
+
+        //判断金额
+        if ($is_order['total_amount'] != bcmul($data['total_amount'], 100, 0)) {
+            throw new ApiException('价格错误!');
+        }
+
+        //判断自定义返回
+        if ($is_order['passback_params'] != $data['passback_params']) {
+            throw new ApiException('返回字段不符!');
+        }
+
+        return $is_order;
+    }
+
+
+    /**
+     * 处理回调
+     * @param $data
+     * @param $pay_obj
+     * @return bool
+     * @throws ApiException
+     */
+    public static function dealNotify($data, $pay_model, $pay_obj)
+    {
+        $data['passback_params'] = $pay_obj->getPassbackParams($data['passback_params']);
+        if ($data['passback_params']['action'] == 'recharge') {     //充值
+            return \App\Logic\Api\RechargeLogic::recharge($data['passback_params']['user_id'], bcmul($data['total_amount'], 100, 0), $pay_model, 2);
+        } elseif ($data['passback_params']['action'] == 'shop_order') {     //商城订单,不用请注释
+            return \App\Logic\Api\ShopOrderCallbackLogic::orderPay($data['passback_params']['user_id'], $data['passback_params']['order_id'], $data['total_amount'] * 100, $data['out_trade_no'], $data['trade_no'], $pay_model, 2);
+        }
+
+        throw new ApiException('错误的支付类型!');
+    }
+
+    /**
+     * 添加支付宝回调日志
+     * @param array $data 调用支付宝的数据
+     * @param string $type 支付类型
+     * @return bool
+     * @throws ApiException
+     */
+    public static function addAlipayNotifyLog($data, $result = true, $error_msg)
+    {
+        $data['deal_status'] = intval($result);
+        $data['error_msg'] = $error_msg;
+
+        $log_alipay_model = new \App\Model\LogAlipayNotifyModel();
+
+        set_save_data($log_alipay_model, $data);
+        $res = $log_alipay_model->save();
+
+        if (!$res) {
+            \Log::error('支付宝回调记录日志失败!' . json_encode($data));
+        }
+    }
+
+}
+

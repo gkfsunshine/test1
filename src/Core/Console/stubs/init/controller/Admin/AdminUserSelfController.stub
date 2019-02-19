@@ -1,0 +1,35 @@
+<?php
+namespace App\Http\Controllers\Admin;
+
+use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+
+class AdminUserSelfController extends Controller
+{
+    public function status()
+    {
+        $data = \App\Logic\Admin\AdminUserLogic::status();
+        return $this->response($data);
+    }
+
+    public function index()
+    {
+        $data = \App\Logic\Admin\AdminUserLogic::getSelf();
+        return $this->response($data);
+    }
+
+    public function update()
+    {
+        $this->verify([
+            'name' => 'no_required',
+            'old_password' => 'no_required',
+            'password' => 'no_required',
+            'headimg' => 'no_required|egnum|can_null',
+            'phone' => 'no_required|mobile|can_null'
+        ], 'POST');
+
+        \App\Logic\Admin\AdminUserLogic::updateSelf($this->verifyData);
+
+        return $this->response();
+    }
+}

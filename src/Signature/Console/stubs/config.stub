@@ -1,0 +1,8 @@
+<?php
+return [
+    'store_drive' => 'mysql',     //选择储存驱动  mysql,redis,cache
+    'signature_from'=>'header',   //签名携带位置，支持header、body
+    'id_from'=>'body',  //签名id携带位置
+    'signature_name'=>'Authorization',  //签名字段命名
+    'id_name'=>'access_key_id'  //签名id命名字段
+];

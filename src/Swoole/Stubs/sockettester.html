@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <!--<script type="text/javascript" src="http://code.jquery.com/jquery-latest.js"></script>-->
+    <script src="https://unpkg.com/vue"></script>
+</head>
+<body>
+
+<div id="app">
+
+    <h1>websocket调试工具</h1>
+
+    <label>websocket请求接口地址:</label>
+    <input v-model="websocket_api">
+    <br/><br/>
+
+    <label>websocket服务地址:</label>
+    <input v-model="websocket_url">
+    <button @click="connectToWs" v-show="ws_status==false">连接</button>
+    <button @click="disconnectToWs" v-show="ws_status==true">断开</button>
+
+    <br/><br/>
+
+    当前ws状态:
+    <span v-if="ws_status" style="color: green">已连接</span>
+    <span v-else style="color: red">未连接</span>
+
+    <div v-show="ws_status==true">
+        <label>发送消息:</label><br/>
+        <textarea v-model="ws_send_msg" rows="5" cols="100"></textarea>
+        <button @click="sendMessage()">发送</button>
+    </div>
+
+
+    <br/><br/>
+    <label>消息列表:</label>
+    <br/>
+    <div>
+        <template v-for="item in ws_content">
+            <p>{{item.date}} : <span :class="item.color">{{ item.message}}</span></p>
+        </template>
+    </div>
+</div>
+
+<style>
+    .color-green {
+        color: green
+    }
+
+    .color-red {
+        color: red
+    }
+
+    .color-black {
+        color: black
+    }
+
+</style>
+
+
+<script>
+    var app = new Vue({
+        el: '#app',
+        data: {
+            websocket_api: 'http://127.0.0.1:8006',
+            websocket_url: 'ws://127.0.0.1:58999',
+            ws_status: false,
+
+            ws_content: [],
+
+            ws_send_msg: '',
+            ws_obj: {}
+        },
+        methods: {
+            //连接socket
+            connectToWs(){
+                let that = this;
+                websocket = new WebSocket(this.websocket_url);
+                that.ws_obj = websocket;
+                websocket.onopen = function (evt) {
+                    that.ws_status = true;
+
+                    that.writeToScreen('SERVER CONNECTED', 'color-green');
+                };
+                websocket.onclose = function (evt) {
+                    that.ws_status = false;
+                    that.writeToScreen('SERVER CLOSED', 'color-red');
+                };
+                websocket.onmessage = function (evt) {
+                    that.writeToScreen('接收到: ' + evt.data);
+                };
+                websocket.onerror = function (evt) {
+                    that.ws_status = false;
+                    that.writeToScreen('SERVER ERROR', 'color-red');
+                };
+            },
+
+            //发送消息
+            sendMessage(){
+                let that = this;
+                let message = that.ws_send_msg;
+                that.ws_obj.send(message);
+                that.writeToScreen('发送:'+message);
+                that.ws_send_msg = '';
+            },
+
+            //断开连接socket
+            disconnectToWs(){
+                let that = this;
+                that.ws_obj.close();
+            },
+
+            writeToScreen(message, color) {
+                let that = this;
+                var date = that.getNowFormatDate();
+
+                that.ws_content.unshift({
+                    date: date,
+                    message: message,
+                    color: color || 'color-black'
+                });
+            },
+
+            getNowFormatDate() {
+                var date = new Date();
+                var seperator1 = "-";
+                var seperator2 = ":";
+                var month = date.getMonth() + 1;
+                var strDate = date.getDate();
+                if (month >= 1 && month <= 9) {
+                    month = "0" + month;
+                }
+                if (strDate >= 0 && strDate <= 9) {
+                    strDate = "0" + strDate;
+                }
+                var currentdate = /*date.getFullYear() + seperator1 + month + seperator1 + strDate
+                 + " " + */date.getHours() + seperator2 + date.getMinutes()
+                        + seperator2 + date.getSeconds();
+                return currentdate;
+            }
+        }
+    })
+
+
+</script>
+
+</body>
+</html>

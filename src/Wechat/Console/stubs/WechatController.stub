@@ -1,0 +1,486 @@
+<?php
+namespace App\Http\Controllers\Api;
+
+use App\Exceptions\ApiException;
+use App\Http\Controllers\Controller;
+
+class WechatController extends Controller
+{
+
+    public function wechatMsgNotity()
+    {
+        //验证消息
+        \Wechat::valid();
+
+        $type = \Wechat::getRev()->getRevType(); // 获取数据类型
+        $data = \Wechat::getRev()->getRevData(); // 获取微信服务器发来的信息
+
+        switch ($type) {
+            case app('wechat')::MSGTYPE_TEXT : // 文本类型
+                // 记录文本消息到数据库
+
+                //---特殊操作优先---
+
+                // 关键字回复
+
+                //自动回复
+                \Wechat::text("hello")->reply();
+
+                break;
+            case app('wechat')::MSGTYPE_EVENT : // 事件类型
+                if ($data ['Event'] == "subscribe") { // 关注事件
+                    //记录关注事件
+
+                    //添加粉丝操作
+
+                    //扫码关注操作
+
+                    //关注回复
+
+                } elseif ($data ['Event'] == "unsubscribe") { // 取消关注事件
+                    //记录取消关注事件
+
+                    //粉丝操作
+
+                } elseif ($data ['Event'] == "LOCATION") { // 获取上报的地理位置事件
+                    //记录用户自动上传的地址位置
+
+                } elseif ($data ['Event'] == "CLICK") { // 自定义菜单
+                    // 记录自定义菜单消息
+
+                    //菜单点击事件
+                    $event_key = $data ["EventKey"];
+
+                } elseif ($data ['Event'] == "VIEW") { // 点击菜单跳转链接时的事件推送
+                    // 记录自定义菜单消息
+
+                } elseif ($data['Event'] == "SCAN") {   //扫二维码进入公众号
+                    // 记录自定义菜单消息
+
+                } elseif (!empty($data['KfAccount'])) {  //客服时间
+
+                }
+                break;
+            case app('wechat')::MSGTYPE_IMAGE : // 图片类型
+                // 记录图片消息
+
+                break;
+            case app('wechat')::MSGTYPE_LOCATION : // 地理位置类型
+                \Wechat::text("地理位置已接收")->reply();
+                break;
+
+            case app('wechat')::MSGTYPE_LINK : // 链接消息
+                \Wechat::text("链接消息已接收")->reply();
+                break;
+            default :
+                \Wechat::text("help info")->reply();
+        }
+    }
+
+    /**
+     * 微信授权
+     * @return array|bool|\Illuminate\Http\RedirectResponse|\Illuminate\Routing\Redirector
+     */
+    public function auth()
+    {
+        $this->verify([
+            'callback' => 'no_required',                    //前端回调地址
+            'type' => 'in:mp:app:web|no_required'           //微信授权类型
+        ], 'GET');
+
+        $data = $this->verifyData;
+
+        /**
+         * callback_path : 回调地址的path,为contrller的路径
+         * is_oauth_user_info : 是否通过授权获取用户信息
+         * check_for : 通过openid或unionid
+         * check_user_model : 检查用户是否存在的model类
+         * check_user_function : 检查用户是否存在的model类里面的function,方法中,如果存在必须返回用户信息数组,且包含uid字段,不存在则返回false
+         * oauth_get_user_silent_function : 授权获取到用户openid,且调用check_user_function后不返回false,则运行这个回调函数
+         * oauth_get_user_info_function : 创建新用户回调函数
+         * create_user_function : 授权成功后,创建seesion回调函数
+         * type : 配置来源
+         */
+        $params = array(
+<<<<<<< HEAD
+            'token' => \Jwt::getToken(),
+            'callback_path' => 'api/wechat/authorities',        //回跳地址的path,为contrller的路径
+            'oauth_type' => 'user_info',                             //是否通过授权获取用户信息,user_info则为显性授权,base为隐形授权
+            'check_for' => 'openid',                            //通过openid或unionid,unionid时,oauth_type一定要显性授权
+            'create_user_function' => array($this, 'create_user_function'),                        //创建新用户的回调function
+            'oauth_get_user_silent_function' => array($this, 'oauth_get_user_silent_function'),    //静默授权获取到用户openid或unionid的回调函数(静默授权时调用)
+            'oauth_get_user_info_function' => array($this, 'oauth_get_user_info_function'),        //授权获取到用户信息的回调函数(显性授权时调用)
+=======
+            'token' => $data['token'],
+            'callback_path' => 'v1_0/api/login/auth',       //回跳地址的path,为contrller的路径
+            'is_oauth_user_info' => true,                       //是否通过授权获取用户信息
+            'check_for' => 'openid',                            //通过openid或unionid
+            'create_user_function' => array($this, 'create_user_function'),                 //创建新用户
+            'oauth_get_user_silent_function' => array($this, 'oauth_get_user_silent_function'),        //静默授权获取到用户openid或unionid的回调函数
+            'oauth_get_user_info_function' => array($this, 'oauth_get_user_info_function'),         //授权获取到用户信息的回调函数
+>>>>>>> c2a484e510eb305113075ca5909c3461755944b8
+        );
+
+        //默认是公众号类型
+        $params['type'] = empty($data['type']) ? 'mp' : $data['type'];
+
+<<<<<<< HEAD
+        //实例化
+        $wechat = new \JiaLeo\Laravel\Wechat\WechatOauthV3($params);
+
+        try {
+            //执行授权操作
+            $result = $wechat->run();
+        } catch (\Exception $e) {
+
+            //处理错误异常
+            if ($data['type'] != 'app') {
+                //授权错误,直接跳转到前端错误页
+                $url_info = parse_url($data['callback']);
+                if (empty($url_info)) {
+                    throw new ApiException('授权错误!');
+                }
+                $host = $url_info['scheme'] . '://' . $url_info['host'];
+
+                return redirect($host . '/authorization_error?msg=' . $e->getMessage() . '&callback=' . $data['callback']);
+            } else {
+                throw new ApiException('授权错误');
+            }
+        }
+
+
+        if ($result instanceof \Illuminate\Http\RedirectResponse) {
+            //返回跳转
+            return $result;
+        } else {
+            //返回json结果
+            return $this->response($result);
+        }
+=======
+        $weObj = new \JiaLeo\Laravel\Wechat\WechatOauth($params);
+        return $weObj->run();
+>>>>>>> c2a484e510eb305113075ca5909c3461755944b8
+    }
+
+    /**
+     * 创建新用户(当授权表中没有记录时,会调用到这个方法)
+     *
+     * @param array $user_info 用户信息 示例如下:
+     * {
+     *      "openid": "OPENID",
+     *      "access_token": "ACCESS_TOKEN",
+     *      "expires_in": "EXPIRES_IN",
+     *      "refresh_token": "REFRESH_TOKEN",
+     *      "scope": "SCOPE",
+     *      "type": "mp",   //mp,app
+     *
+     *      以下是显性授权才有的信息
+     *      "nickname": NICKNAME,
+     *      "sex":"1",
+     *      "province":"PROVINCE"
+     *      "city":"CITY",
+     *      "country":"COUNTRY",
+     *      "headimgurl":    "http://wx.qlogo.cn/mmopen/g3MonUZtNHkdmzicIlibx6iaFqAc56vxLSUfpb6n5WKSYVY0ChQKkiaJSgQ1dZuTOgvLLrhJbERQQ
+     *      4eMsv84eavHiaiceqxibJxCfHe/46",
+     *      "privilege":[ "PRIVILEGE1" "PRIVILEGE2"],
+     *      "unionid": "o6_bmasdasdsad6_2sgVt7hMZOPfL"
+     * }
+     *
+<<<<<<< HEAD
+     * 逻辑业务错误请直接抛出错误,return需返回一个数组
+     * 如果是app,则返回当前return的信息,否则会跳转原传入的callback
+     *
+=======
+>>>>>>> c2a484e510eb305113075ca5909c3461755944b8
+     * @return int $id 用户id
+     */
+    public function create_user_function($user_info)
+    {
+
+<<<<<<< HEAD
+        $user_auth_oauth = new \App\Model\UserAuthOauthModel();
+        $data = [
+            'user_id' => 0,
+            'nickname' => $user_info['nickname'] ?? '',
+            'headimg' => $user_info['headimgurl'] ?? '',
+            'id2' => $user_info['unionid'] ?? '',
+            'access_token' => $user_info['access_token'],
+            'refresh_token' => $user_info['refresh_token'],
+            'expires_time' => time() + $user_info['expires_in'],
+            'info' => json_encode($user_info, JSON_UNESCAPED_UNICODE)
+        ];
+=======
+        \DB::beginTransaction();
+>>>>>>> c2a484e510eb305113075ca5909c3461755944b8
+
+        $user_model = new \App\Model\UserModel();
+        set_save_data($user_model, [
+            'username' => $user_info['nickname'],
+            'last_login_ip' => get_client_ip(),
+            'headimg' => $user_info['headimgurl'],
+        ]);
+        $result = $user_model->save();
+        if (!$result) {
+            \DB::rollBack();
+            throw new ApiException('数据库错误!');
+        }
+
+        $user_id = $user_model->id;
+
+        $user_auth_oauth = new \App\Model\UserAuthOauthModel();
+        set_save_data($user_auth_oauth, [
+            'user_id' => $user_id,
+            'id1' => $user_info['openid'],
+            'id2' => isset($user_info['unionid']) ? $user_info['unionid'] : ''
+        ]);
+        $result = $user_auth_oauth->save();
+        if (!$result) {
+            \DB::rollBack();
+            throw new ApiException('数据库错误!');
+        }
+
+        \DB::commit();
+
+<<<<<<< HEAD
+        //此处可修改,添加到user表和创建用户会话
+        //新用户
+        \Jwt::set('oauth', [
+            'type' => 1,      //对应user_auth_oauth中的oauth_type
+            'user_auth_oauth_id' => $user_auth_oauth_id
+        ]);
+
+        //队列异步处理下载头像
+//        dispatch((new DownloadHeadImg([
+//            'url' => $user_info['headimgurl'],
+//            'user_auth_oauth_id' => $user_auth_oauth_id
+//        ]))->onQueue('downloadheadimg'));
+
+        return [];
+=======
+        return $user_id;
+>>>>>>> c2a484e510eb305113075ca5909c3461755944b8
+    }
+
+    /**
+     * 显性授权后操作function
+     * @param int $user_id 用户id
+     * @param array $user_info 用户信息 示例如下
+     * {
+     * "openid":" OPENID",
+     * " nickname": NICKNAME,
+     * "sex":"1",
+     * "province":"PROVINCE"
+     * "city":"CITY",
+     * "country":"COUNTRY",
+     * "headimgurl":    "http://wx.qlogo.cn/mmopen/g3MonUZtNHkdmzicIlibx6iaFqAc56vxLSUfpb6n5WKSYVY0ChQKkiaJSgQ1dZuTOgvLLrhJbERQQ
+     * 4eMsv84eavHiaiceqxibJxCfHe/46",
+     * "privilege":[ "PRIVILEGE1" "PRIVILEGE2"     ],
+     * "unionid": "o6_bmasdasdsad6_2sgVt7hMZOPfL"
+     * }
+     * @return
+     */
+    public function oauth_get_user_info_function($user_id, $user_info)
+    {
+<<<<<<< HEAD
+
+        if ($user_id > 0) {                                     //旧用户通过微信直接登录
+            $this->wechatLogin($user_info['user_id']);
+
+        } elseif (!empty(\Jwt::get('user_info.user_id'))) {     //存在登录状态,但是为新绑定的微信 (登录中的用户,绑定微信)
+            $this->bindAccount();
+        }
+
+=======
+        \Jwt::set('user_info.user_id', $user_id);
+>>>>>>> c2a484e510eb305113075ca5909c3461755944b8
+        return true;
+    }
+
+    /**
+     * 静默授权后操作function
+     * @param array $user_info 用户信息 示例如下
+     * $user_info = array(
+     *      'openid' => '',
+     *      'unionid' => '',
+     *      'user_id' => '',
+     *      'type' => ''
+     * );
+<<<<<<< HEAD
+     *
+     * 此处静默授权成功,且授权表有此用户信息时被调用.否则不会被调用
+     * $user_info['user_id']有可以能为0,自行作判断
+     *
+     * 逻辑业务错误请直接抛出错误,return需返回一个数组
+     * 如果是app,则返回当前return的信息,否则会跳转原传入的callback
+     *
+=======
+>>>>>>> c2a484e510eb305113075ca5909c3461755944b8
+     * @param $user_info
+     */
+    public function oauth_get_user_silent_function($user_info)
+    {
+<<<<<<< HEAD
+
+        if ($user_info['user_id'] == 0) {
+
+            \Jwt::set('oauth', [
+                'type' => 1,      //对应user_auth_oauth中的oauth_type
+                'user_auth_oauth_id' => $user_info['oauth_id']
+            ]);
+
+            if (!empty(\Jwt::get('user_info.user_id'))) {     //存在登录状态,但是为新绑定的微信 (登录中的用户,绑定微信)
+                $this->bindAccount();
+            }
+
+        } else {
+            $this->wechatLogin($user_info['user_id']);
+        }
+
+        return [];
+    }
+
+    /**
+     * 通过微信登录成功逻辑
+     * @param $user_id
+     * @return bool
+     * @throws ApiException
+     */
+    public function wechatLogin($user_id)
+    {
+        $user = UserModel::where('is_on', 1)
+            ->select('id', 'status')
+            ->find($user_id);
+        if (!$user) {
+            throw new ApiException('用户数据错误!');
+        }
+
+        if ($user->status == 0) {
+            throw new ApiException('用户已被冻结!');
+        }
+
+        load_helper('Network');
+        //更新用户信息
+        set_save_data($user, [
+            'last_login_ip' => get_client_ip(),
+            'last_login_time' => time(),
+        ]);
+        $result = $user->save();
+        if (!$result) {
+            throw new ApiException('数据库错误!');
+        }
+
+        //登录状态
+        \Jwt::set('user_info.user_id', $user_id);
+
+        return true;
+    }
+
+    /**
+     * 绑定已有账号
+     * @return bool
+     * @throws ApiException
+     */
+    public function bindAccount()
+    {
+        $user_id = \Jwt::get('user_info.user_id');
+
+        //判断此用户是否已绑定微信
+        $user = UserModel::where('is_on', 1)
+            ->select('id', 'status', 'is_wechat')
+            ->find($user_id);
+        if (!$user) {
+            throw new ApiException('用户数据错误!');
+        }
+
+        if ($user->status == 0) {
+            throw new ApiException('用户已被冻结!');
+        }
+
+        $oauth_info = \Jwt::get('oauth');
+        if (!$oauth_info || empty($oauth_info['user_auth_oauth_id']) || empty($oauth_info['type'])
+            || $oauth_info['type'] != 1
+        ) {
+            throw new ApiException('授权错误!');
+        }
+
+        $user_auth_oauth_id = $oauth_info['user_auth_oauth_id'];
+
+        $is_wechat = \App\Model\UserAuthOauthModel::select(['id', 'user_id', 'nickname', 'headimg'])
+            ->where('oauth_type', 1)
+            ->find($user_auth_oauth_id);
+        if ($is_wechat->user_id != 0) {
+            throw new ApiException('该微信账号已绑定其他账号,请换一个微信账号!');
+        }
+
+        //绑定同一个账号,则立刻返回
+        if ($is_wechat->user_id == $user_id) {
+            return true;
+        }
+
+        \DB::beginTransaction();
+
+        if ($user->is_wechat == 1) {        //重新绑定
+
+            //解除原来账号
+            $is_update = \App\Model\UserAuthOauthModel::where('user_id', $user_id)
+                ->where('oauth_type', 1)
+                ->update(['user_id' => 0]);
+            if (!$is_update) {
+                \DB::rollBack();
+                throw new ApiException('数据库错误,请稍后再试!');
+            }
+        }
+
+        //绑定当前账号
+        $is_wechat->user_id = $user_id;
+        $res = $is_wechat->save();
+        if (!$res) {
+            \DB::rollBack();
+            throw new ApiException('数据库错误,请稍后再试!');
+        }
+
+        if ($user->is_wechat == 0) {        //重新绑定
+            $user->is_wechat = 1;
+            $res = $user->save();
+            if (!$res) {
+                \DB::rollBack();
+                throw new ApiException('数据库错误,请稍后再试!');
+            }
+        }
+
+        \DB::commit();
+
+        return true;
+    }
+
+    /**
+     * 微信js签名
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function js()
+    {
+        $this->verify([
+            'url' => '',
+            'type' => 'in:mp:app|no_required'
+        ], 'POST');
+
+        $url = $this->verifyData['url'];
+
+        if (isset($this->verifyData['type'])) {
+            $type = $this->verifyData['type'];
+        } else {
+            $type = 'mp';
+        }
+
+        $wechat = new \JiaLeo\Laravel\Wechat\Wechat($type);
+        $res = $wechat->getJsSign($url);
+        return $this->response(['sign' => $res, 're' => $url, 'msg' => !$res ? $wechat->getErrorMsg() : '']);
+    }
+
+=======
+        \Jwt::set('user_info.user_id', $user_info['user_id']);
+        return true;
+    }
+
+>>>>>>> c2a484e510eb305113075ca5909c3461755944b8
+}

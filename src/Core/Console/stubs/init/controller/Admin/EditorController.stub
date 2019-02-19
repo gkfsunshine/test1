@@ -1,0 +1,16 @@
+<?php
+namespace App\Http\Controllers\Admin;
+
+use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+
+class EditorController extends Controller
+{
+    //
+    public function index()
+    {
+        $config_name = 'admin_config_list';
+        $editor = new \JiaLeo\Laravel\Ueditor\Ueditor($config_name);
+        return $editor->run();
+    }
+}

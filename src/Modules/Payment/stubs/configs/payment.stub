@@ -1,0 +1,109 @@
+<?php
+
+return array(
+
+    //支付宝
+    'alipay' => array(
+
+        //
+        'all' => array(
+            //支付宝分配给开发者的应用ID
+            'app_id' => env('PAYMENT_ALIPAY_ALL_APP_ID', 'XXX'),
+
+            //签名方式,现在只支持RSA2
+            'sign_type' => 'RSA2',
+
+            //支付宝公钥(证书路径或key:eg,storage_path('cert/alipay/').'alipay_rsa_private_key.pem')
+            'ali_public_key' => env('PAYMENT_ALIPAY_ALL_ALI_PUBLIC_KEY', storage_path('cert/alipay/') . 'alipay_rsa_public_key.pem'),
+
+            //用户应用私钥(证书路径或key:eg,storage_path('cert/alipay/').'alipay_rsa_private_key.pem')
+            'rsa_private_key' => env('PAYMENT_ALIPAY_ALL_RSA_PRIVATE_KEY', storage_path('cert/alipay/') . 'alipay_rsa_private_key.pem'),
+
+            //是否返回支付宝原始数据
+            'return_raw' => false,
+        )
+    ),
+
+    //银联支付
+    'unicompay' => array(
+
+        //
+        'all' => array(
+
+            //是否测试环境(测试环境将调用测试接口)
+            'is_test' => true,
+
+            //商户代码
+            'mer_id' => env('PAYMENT_UNICOMPAY_ALL_MERID_ID', ''),
+
+            //私钥证书
+            'private_key_path' => env('PAYMENT_UNICOMPAY_ALL_PRIVATE_KEY_PATH', storage_path('cert/unicompay/acp_test_sign.pfx')),
+
+            //私钥密码
+            'private_key_pwd' => env('PAYMENT_UNICOMPAY_ALL_PRIVATE_KEY_PWD', ''),
+
+            //公钥证书
+            'cert_dir' => env('PAYMENT_UNICOMPAY_ALL_CERT_DIR', storage_path('cert/unicompay/')),
+
+        ),
+    ),
+
+    //微信支付
+    'wechatpay' => array(
+
+        //除app支付
+        'all' => array(
+            'appid' => env('PAYMENT_WECHATPAY_ALL_APPID', ''),
+            'mchid' => env('PAYMENT_WECHATPAY_ALL_MCHID', ''),
+            'key' => env('PAYMENT_WECHATPAY_ALL_KEY', ''), //填写你设定的key
+            'sslcert_path' => env('PAYMENT_WECHATPAY_ALL_SSLCERT_PATH', storage_path('cert/wechatpay/apiclient_cert.pem')),
+            'sslkey_path' => env('PAYMENT_WECHATPAY_ALL_SSLKEY_PATH', storage_path('cert/wechatpay/apiclient_key.pem')),
+        ),
+
+        'app' => array(
+            'appid' => env('PAYMENT_WECHATPAY_APP_APPID', ''),
+            'mchid' => env('PAYMENT_WECHATPAY_APP_MCHID', ''),
+            'key' => env('PAYMENT_WECHATPAY_APP_KEY', ''), //填写你设定的key
+            'sslcert_path' => env('PAYMENT_WECHATPAY_APP_SSLCERT_PATH', storage_path('cert/wechatpay/apiclient_cert.pem')),
+            'sslkey_path' => env('PAYMENT_WECHATPAY_APP_SSLKEY_PATH', storage_path('cert/wechatpay/apiclient_key.pem')),
+        )
+    ),
+
+    //易宝支付
+    'yeepay' => array(
+        // 商户编号
+        'merchantaccount' => env('PAYMENT_YEE_MERCHANTACCOUNT', ''), '10014117037',
+
+        // 商户私钥
+        'merchantprivatekey' => env('PAYMENT_YEE_MERCHANTPRIVATEKEY', ''),
+
+        // 商户公钥
+        'merchantpublickey' => env('PAYMENT_YEE_MERCHANTPUBLICKEY', ''),
+
+        // 易宝公钥
+        'yeepaypublickey' => env('PAYMENT_YEE_YEEPAYPUBLICKEY', ''),
+
+        //代付-商户私钥
+        'transfermerchantprivatekey' => env('PAYMENT_YEE_TRANSFERMERCHANTPRIVATEKEY', ''),
+
+        //提供的jar包签名接口地址
+        'signjarhost' => env('PAYMENT_YEE_SIGNJARHOST', ''),
+
+        'pos' => array(
+            'key' => env('PAYMENT_YEE_POS_KEY', '')
+        )
+    ),
+
+    //paypal
+    'paypal' => array(
+        'all' => array(
+            'client_id' => env('PAYPAL_ALL_CLIENT_ID', ''),
+            'client_secret' => env('PAYPAL_ALL_CLIENT_SECRET', ''),
+            'account' => env('PAYPAL_ALL_ACCOUNT', ''),
+            'username' => env('PAYPAL_ALL_USERNAME', ''),
+            'password' => env('PAYPAL_ALL_PASSWORD', ''),
+            'signature' => env('PAYPAL_ALL_SIGNATURE', ''),
+            'mode' => env('PAYPAL_ALL_MODE', 'sandbox'),                //sandbox沙河环境 ,上线后改为product
+        )
+    )
+);

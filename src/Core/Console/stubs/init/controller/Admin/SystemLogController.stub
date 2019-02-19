@@ -1,0 +1,30 @@
+<?php
+namespace App\Http\Controllers\Admin;
+
+use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+
+class SystemLogController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function index()
+    {
+        //
+        $this->verify([
+            'admin_name'=>'no_required',
+            'keyword'=>'no_required',
+            'phone'=>'no_required|mobile',
+            'start_time' => 'no_required|timestamp',
+            'end_time' => 'no_required|timestamp',
+        ],'GET');
+
+        $list = \App\Logic\Admin\SystemLogLogic::getSystemLogList($this->verifyData);
+
+        return $this->responseList($list);
+
+    }
+}

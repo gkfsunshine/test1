@@ -1,0 +1,70 @@
+<?php
+namespace App\Logic;
+
+use JiaLeo\Swoole\Lib\GatewayClient;
+use JiaLeo\Swoole\Lib\Message;
+use JiaLeo\Swoole\Lib\Worker;
+use JiaLeo\Swoole\Lib\Context;
+
+class SocketLogic
+{
+
+    const NOLOGIN_TYPE = array(
+        'init', 'ping'
+    );
+
+    /**
+     * 检查是否登录
+     * @param $data
+     * @param $client_id
+     * @return bool
+     */
+    public static function checkLogin($data, $client_id)
+    {
+        //是否已绑定uid
+        $uid = Worker::getUidByClientId($client_id);
+        if ($uid) {
+            return $uid;
+        }
+
+        if (!in_array($data['type'], self::NOLOGIN_TYPE)) {
+            Worker::sendToClient($client_id, Message::formatSendData('你还没有登录', 'error', 'NO_LOGIN'));
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * socket用户登录(前端ajax请求验证登录)
+     * @param $user_id
+     * @return string
+     */
+    public static function userSocketLogin($client_id)
+    {
+        $user_id = \Jwt::get('user_info.user_id');
+
+        //是否已绑定
+        $has_uid = GatewayClient::getUidByClientId($client_id);
+        if ($has_uid) {
+            throw new \Exception('已绑定用户');
+        }
+
+        $user = \App\Model\UserModel::where('is_on', 1)
+            ->select('id', 'username as nickname', 'headimg')
+            ->find($user_id);
+        if (!$user) {
+            throw new \Exception('登录失败,用户不存在!');
+        }
+
+        //返回自己信息
+        $reply_self = array(
+            'id' => $user->id,
+            'nickname' => $user->nickname,
+            'headimg' => $user->headimg
+        );
+        GatewayClient::sendToClient($client_id, Message::formatSendData($reply_self, 'login_success', true));
+        return true;
+    }
+
+}

@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title></title>
+</head>
+<body>
+    <p>亲爱的用户：</p>
+    <p>您好！</p>
+    <p>感谢您使用{{$project_name}}服务。您正在进行邮箱验证，请在验证码输入框中输入此次验证码：<b style="color: #3869D4;">{{$code}}</b> 以完成验证。</p>
+    <p>如非本人操作，请忽略此邮件，由此给您带来的不便请谅解！</p>
+
+    <p>汉子科技团队</p>
+    <p>{{$date}}</p>
+
+</body>
+</html>

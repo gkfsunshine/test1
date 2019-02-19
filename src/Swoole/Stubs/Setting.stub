@@ -1,0 +1,48 @@
+<?php
+namespace App\Socket;
+
+
+/**
+ * packet设置类
+ * Class PacketSetting
+ * @package App\Socket
+ */
+class Setting
+{
+
+    /**
+     * 配置packet参数
+     * @return array
+     */
+    public static function packetConfig()
+    {
+        return array(
+            //'open_length_check' => true,
+            //'package_max_length' => 1024,
+            //'package_length_type' => 'C',
+            //'package_length_offset' => 1,
+            //'package_body_offset' => 0,
+            //'heartbeat_check_interval' => 60,
+            //'package_length_func' => function ($data) {
+
+            //},
+        );
+    }
+
+    /**
+     * websocket自定义握手验证
+     * @param $request
+     * @return bool
+     */
+    public static function verifyWebsocket($request)
+    {
+        // 获取get参数
+        //$params_get = $request->get;
+
+        // 获取header参数
+        //$params_header = $request->header;
+        //return $params_get['token'] == 1 ? true : false;
+        return true;
+    }
+
+}

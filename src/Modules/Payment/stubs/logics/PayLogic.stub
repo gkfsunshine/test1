@@ -1,0 +1,213 @@
+<?php
+namespace App\Logic\Pay;
+
+use App\Exceptions\ApiException;
+use App\Model\ShopOrderModel;
+use App\Model\TicketOrderModel;
+use Symfony\Component\VarDumper\Dumper\DataDumperInterface;
+
+class PayLogic
+{
+
+    /**
+     * 添加支付流水
+     * @param $action
+     * @param int $pay_method_id
+     * @param string $device
+     * @return int
+     * @throws ApiException
+     */
+    public static function addPayTransaction($action, $pay_method_id = 1, $device = 'web', &$type)
+    {
+
+        //转换支付参数的action为支付内容类型
+        switch ($action) {
+            case 'recharge' :   //充值余额
+                $type = 1;
+                break;
+            case 'shop_order' :   //充值余额
+                $type = 2;
+                break;
+            default :           //其他
+                $type = 0;
+                break;
+        }
+
+        $user_id = \Jwt::get('user_info.user_id');
+        $transaction_id = \App\Logic\Api\UserCapitalLogic::addTransaction($user_id, $type, 1, $pay_method_id, $device);
+        return $transaction_id;
+    }
+
+
+    /*----------- 微信支付 -----------*/
+
+    /**
+     * 调起微信支付
+     * @param $data
+     *        device 设备平台
+     *        body 微信支付的描述内容
+     *        amount 支付价格
+     * @param $return_params
+     *        action  支付类型
+     * @return array
+     */
+    public static function payByWechatpay($data, $return_params = array(), $openid = null)
+    {
+
+        if ($data['device'] == 'mp') {
+            $config = config('payment.wechatpay.all');
+            $wechatpay = new \JiaLeo\Payment\Wechatpay\MpPay($config);
+        } elseif ($data['device'] == 'h5') {
+            $config = config('payment.wechatpay.all');
+            $wechatpay = new \JiaLeo\Payment\Wechatpay\H5Pay($config);
+        } elseif ($data['device'] == 'native') {
+            $config = config('payment.wechatpay.all');
+            $wechatpay = new \JiaLeo\Payment\Wechatpay\NativePay($config);
+        } elseif ($data['device'] == 'app') {
+            $config = config('payment.wechatpay.app');
+            $wechatpay = new \JiaLeo\Payment\Wechatpay\AppPay($config);
+        } else {
+            throw new ApiException('支付类型有误');
+        }
+
+        $out_trade_no = date('YmdHis') . \Jwt::get('user_info.user_id') . rand(10000, 99999);
+
+        $pay_data = [
+            'body' => $data['body'],        //内容
+            'attach' => $wechatpay->setPassbackParams($return_params),  //商家数据包
+            'out_trade_no' => $out_trade_no,    //商户订单号
+            'total_fee' => $data['amount'],  //支付价格(单位:分)
+            'notify_url' => request()->getSchemeAndHttpHost() . '/api/wechatpay/notifies/' . $data['device']       //后台回调地址
+        ];
+
+        if ($data['device'] == 'mp') {
+            $pay_data['openid'] = $openid;
+        }
+
+        $url = $wechatpay->handle($pay_data);
+
+        \DB::beginTransaction();
+
+        //添加日志
+        try {
+            $transaction_id = self::addPayTransaction($return_params['action'], 1, $data['device'], $type);
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            throw new ApiException('数据库错误!');
+        }
+
+        //微信
+        $save_data = array(
+            'user_id' => \Jwt::get('user_info.user_id'),
+            'out_trade_no' => $out_trade_no,//$data['out_trade_no'],
+            'total_amount' => $data['amount'],
+            'passback_params' => $wechatpay->setPassbackParams($return_params),
+            'type' => $type,
+            'transaction_id' => $transaction_id
+        );
+
+        $log_wechatpay_model = new \App\Model\LogWechatpayPayModel();
+
+        set_save_data($log_wechatpay_model, $save_data);
+        $res = $log_wechatpay_model->save();
+        if (!$res) {
+            \DB::rollBack();
+            throw new ApiException('数据库错误!');
+        }
+
+        \DB::commit();
+
+        //扫码支付,返回二维码
+        if ($data['device'] == 'native') {
+            $qrcode_code = new \SimpleSoftwareIO\QrCode\BaconQrCodeGenerator;
+            $qrcode = base64_encode($qrcode_code->format('png')->size(360)->generate($url));
+            $url = ['qrcode' => 'data:image/png;base64,' . $qrcode];
+        }
+
+        if ($data['device'] == 'app' || $data['device'] == 'mp' || $data['device'] == 'native') {
+            return ['sign' => $url];
+        } else {
+            return redirect($url);
+        }
+    }
+
+    /*----------- 支付宝支付 -----------*/
+
+    /**
+     * 支付宝支付
+     * @param $data
+     *        body 支付宝的body
+     *        subject 支付宝的subject
+     *        amount 价格
+     *        device 设备平台
+     * @return array
+     */
+    public static function payByAlipay($data, $return_params = array())
+    {
+        $config = config('payment.alipay.all');
+
+        if ($data['device'] == 'web') {
+            $alipay = new \JiaLeo\Payment\Alipay\WebPay($config);
+        } elseif ($data['device'] == 'h5') {
+            $alipay = new \JiaLeo\Payment\Alipay\WapPay($config);
+        } elseif ($data['device'] == 'app') {
+            $alipay = new \JiaLeo\Payment\Alipay\AppPay($config);
+        } else {
+            $alipay = new \JiaLeo\Payment\Alipay\WebPay($config);
+        }
+
+        $out_trade_no = date('YmdHis') . \Jwt::get('user_info.user_id') . rand(10000, 99999);
+
+        $pay_data = [
+            'body' => $data['body'],        //内容
+            'subject' => $data['subject'],  //标题
+            'out_trade_no' => $out_trade_no,    //商户订单号
+            'timeout_express' => '30m',     //取值范围：1m～15d。m-分钟，h-小时，d-天，1c-当天
+            'total_amount' => $data['amount'],  //支付价格(单位:分)
+            'passback_params' => $alipay->setPassbackParams($return_params),
+            'notify_url' => request()->getSchemeAndHttpHost() . '/api/alipay/notifies'       //后台回调地址
+        ];
+
+        //前端同步返回地址
+        if (!empty($data['callback'])) {
+            $pay_data['return_url'] = $data['callback'];
+        }
+        $url = $alipay->handle($pay_data);
+
+        \DB::beginTransaction();
+
+        //添加日志
+        try {
+            $transaction_id = self::addPayTransaction($return_params['action'], 2, $data['device'], $type);
+        } catch (\Exception $e) {
+            \DB::rollBack();
+            throw new ApiException('数据库错误!');
+        }
+
+        $save_data = array(
+            'user_id' => \Jwt::get('user_info.user_id'),
+            'out_trade_no' => $out_trade_no,
+            'total_amount' => $data['amount'],
+            'passback_params' => $alipay->setPassbackParams($return_params),
+            'type' => $type,
+            'transaction_id' => $transaction_id
+        );
+
+        $log_alipay_model = new \App\Model\LogAlipayPayModel();
+
+        set_save_data($log_alipay_model, $save_data);
+        $res = $log_alipay_model->save();
+        if (!$res) {
+            \DB::rollBack();
+            throw new ApiException('数据库错误!');
+        }
+
+        \DB::commit();
+
+        if ($data['device'] == 'app') {
+            return ['sign' => $url];
+        } else {
+            return redirect($url);
+        }
+    }
+}

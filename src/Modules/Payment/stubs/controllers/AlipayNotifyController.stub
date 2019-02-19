@@ -1,0 +1,64 @@
+<?php
+namespace App\Http\Controllers\Pay;
+
+use App\Exceptions\ApiException;
+use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+
+class AlipayNotifyController extends Controller
+{
+    /**
+     * 支付宝回调
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function payNotify()
+    {
+        $config = config('payment.alipay.all');
+        $alipay = new \JiaLeo\Payment\Alipay\Notify($config);
+
+        $result = false;
+        $error_msg = '';
+        $data = array();
+
+        try {
+            //验签
+            $data = $alipay->handle();
+
+            //验证单号是否正确
+            $log_alipay_pay_model = \App\Logic\Pay\AlipayNotifyLogic::checkOutTradeNo($data);
+
+            \DB::beginTransaction();
+
+            //处理业务逻辑(业务一定要开事务,且务必不要提交)
+            //TODO
+            \App\Logic\Pay\AlipayNotifyLogic::dealNotify($data, $log_alipay_pay_model, $alipay);
+
+            //更改单号状态
+            set_save_data($log_alipay_pay_model, ['status' => 1, 'dealed_at' => time()]);
+            $res = $log_alipay_pay_model->save();
+            if (!$res) {
+                throw new ApiException('修改支付处理状态失败!');
+            }
+
+            //尝试提交
+            \DB::commit();
+
+            $alipay->returnSuccess();
+            $result = true;
+        } catch (\Exception $e) {
+            //尝试回滚
+            \DB::rollBack();
+
+            $error_msg = $e->getMessage();
+            $alipay->returnFailure();
+        }
+
+        $data['raw_data'] = json_encode($alipay->rawData);
+
+        //记录回调日志
+        \App\Logic\Pay\AlipayNotifyLogic::addAlipayNotifyLog($data, $result, $error_msg);
+        exit;
+    }
+
+}

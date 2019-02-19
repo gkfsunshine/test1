@@ -1,0 +1,487 @@
+<?php
+namespace App\Logic\Admin;
+
+use App\Exceptions\ApiException;
+
+class AdminUserLogic
+{
+
+    /**
+     * 管理员列表
+     * @param $data array 筛选数组
+     *        $data.name 筛选名称
+     *        $data.phone 筛选手机号码
+     *        $data.start_time 筛选创建时间-开始时间
+     *        $data.end_time 筛选创建时间-结束时间
+     * @return \App\Model\AdminUserModel|\Illuminate\Database\Query\Builder
+     */
+    public static function getAdminUserList($data)
+    {
+        $list = \App\Model\AdminUserModel::where('is_on', '=', 1)
+            ->select(['id', 'account', 'name', 'phone', 'last_login_ip', 'last_login_time', 'created_at', 'updated_at', 'headimg'])
+            ->with(['roles' => function ($query) {
+                $query->select('name');
+            }])
+            ->orderBy('id', 'DESC');
+
+        //筛选名称
+        if (isset($data['name'])) {
+            $list->where('name', 'like', '%' . $data['name'] . '%');
+        }
+
+        //筛选名称
+        if (isset($data['phone'])) {
+            $list->where('phone', $data['phone']);
+        }
+
+        //筛选创建时间
+        if (isset($data['start_time']) && isset($data['end_time'])) {
+            if ($data['start_time'] > $data['end_time']) {
+                throw new ApiException('开始时间不能大于结束时间');
+            }
+
+            $list->whereBetween('created_at', [$data['start_time'], $data['end_time']]);
+        }
+
+        $list = $list->paginate();
+
+        //判断修改删除编辑权限
+        $roles = \Jwt::get('admin_info.role');
+        $admin_id = \Jwt::get('admin_info.admin_id');
+        if (in_array(1, $roles)) {
+            $val['is_can_delete'] = 1;
+            $val['is_can_update'] = 1;
+        } else {
+            $val['is_can_delete'] = 0;
+            $val['is_can_update'] = 0;
+        }
+
+        load_helper('Network');
+        load_helper('File');
+
+        //重装数据
+        $list->each(function ($item) use ($admin_id, $val) {
+            $item->role_string = $item->roles->implode('name', ',');
+            unset($item->roles);
+
+            $item->is_can_delete = $val['is_can_delete'];
+            $item->is_can_update = $val['is_can_update'];
+
+            if ($item->id == $admin_id) {
+                $item->is_can_delete = 0;
+            }
+
+            //转换ip
+            $item->last_login_ip = long2ip($item->last_login_ip);
+
+            //转换头像
+            $item->headimg = auto_url($item->headimg);
+        });
+
+        return $list;
+    }
+
+    /**
+     * 管理员单条数据
+     * @param int $id 管理员ID
+     * @return \App\Model\AdminUserModel|array|\Illuminate\Database\Query\Builder|null|\stdClass
+     * @throws ApiException
+     */
+    public static function getOneAdminUser($id)
+    {
+        $data = \App\Model\AdminUserModel::where('is_on', '=', 1)
+            ->select(['id', 'account', 'phone', 'name', 'headimg', 'last_login_ip', 'last_login_time', 'updated_at', 'headimg'])
+            ->with(['roles' => function ($query) {
+                $query->select('admin_role.id', 'name');
+            }])
+            ->find($id);
+
+        if (!$data) {
+            throw new ApiException('不存在管理员用户');
+        }
+
+        //转换ip
+        $data->last_login_ip = long2ip($data->last_login_ip);
+
+        //处理头像
+        load_helper('File');
+        $data->headimg = auto_url($data->headimg);
+
+        //删除多余数据
+        $data->roles->each(function ($item) {
+            unset($item->pivot);
+        });
+
+        return $data;
+    }
+
+    /**
+     * 添加管理员
+     * @param array $data 要添加的数据
+     * @return bool
+     * @throws ApiException
+     */
+    public static function addAdminUser($data)
+    {
+        //验证用户名是否已经被使用
+        $verift_admin = \App\Model\AdminUserModel::where('is_on', '=', 1)
+            ->where('account', '=', $data['account'])
+            ->first(['id']);
+
+        if (!empty($verift_admin)) {
+            throw new ApiException('该用户已被注册');
+        }
+
+        load_helper('Password');
+        $get_password = create_password($data['password'], $salt);
+
+        load_helper('Network');
+
+        \DB::beginTransaction();
+
+        $admin_user_model = new \App\Model\AdminUserModel();
+        $get_admin_data = array(
+            'account' => $data['account'],
+            'phone' => isset($data['phone']) ? $data['phone'] : 0,
+            'password' => $get_password,
+            'salt' => $salt,
+            'name' => $data['name'],
+            'last_login_ip' => get_client_ip()
+        );
+
+        //上传的头像
+        if (isset($data['headimg'])) {
+            if (!empty($data['headimg'])) {
+                $path = \App\Model\UploadModel::where('is_on', 1)
+                    ->select('path')
+                    ->find($data['headimg']);
+
+                if (!$path) {
+                    \DB::beginTransaction();
+                    throw new ApiException('图片不存在!');
+                }
+
+                $get_admin_data['headimg'] = $path->path;
+            } else {
+                $get_admin_data['headimg'] = '';
+            }
+
+        }
+
+        set_save_data($admin_user_model, $get_admin_data);
+        $res = $admin_user_model->save();
+
+        if (!$res) {
+            \DB::beginTransaction();
+            throw new ApiException('数据库错误!');
+        }
+
+        foreach ($data['role_ids'] as $val) {
+
+            //判断用户角色是否存在
+            $is_role = \App\Model\AdminRoleModel::where('is_on', 1)
+                ->select('id')
+                ->find($val['role_id']);
+
+            if (!$is_role) {
+                \DB::beginTransaction();
+                throw new ApiException('角色不存在!');
+            }
+
+            $admin_user_role_model = new \App\Model\AdminUserRoleModel();
+            $get_admin_user_role_data
+                = array(
+                'admin_user_id' => $admin_user_model->id,
+                'admin_role_id' => $val['role_id']
+            );
+            set_save_data($admin_user_role_model, $get_admin_user_role_data);
+            $res_tow = $admin_user_role_model->save();
+            if (empty($res_tow)) {
+                \DB::rollBack();
+                throw new ApiException('数据库错误!');
+            }
+        }
+
+        \DB::commit();
+        return true;
+    }
+
+    /**
+     * 修改管理员信息
+     * @param array $data 需要修改的数据
+     * @param int $id 管理员ID
+     * @throws ApiException
+     */
+    public static function updateAdminUser($data, $id)
+    {
+        $res = \App\Model\AdminUserModel::where('is_on', 1)
+            ->select(['id'])
+            ->find($id);
+
+        if (!$res) {
+            throw new ApiException('管理员不存在!');
+        }
+
+        $admin_id = \Jwt::get('admin_info.admin_id');
+
+        //修改密码
+        if (isset($data['password'])) {
+            if ($id == 1) {
+                throw new ApiException('你没有权限修改系统管理员密码!');
+            }
+
+            load_helper('Password');
+            $get_password = create_password($data['password'], $salt);
+            $data['password'] = $get_password;
+            $data['salt'] = $salt;
+        }
+
+        //改头像
+        if (isset($data['headimg'])) {
+            if (!empty($data['headimg'])) {
+                $path = \App\Model\UploadModel::where('is_on', 1)
+                    ->select('path')
+                    ->find($data['headimg']);
+
+                if (!$path) {
+                    throw new ApiException('图片不存在!');
+                }
+
+                $data['headimg'] = $path->path;
+            }
+        }
+
+        //判断手机
+        if (isset($data['phone']) && $data['phone'] == '') {
+            $data['phone'] = 0;
+        }
+
+        \DB::beginTransaction();
+
+        if (isset($data['role_ids'])) {
+            if ($id == 1) {
+                throw new ApiException('默认系统超级管理员不能被改动角色!');
+            }
+
+            if ($admin_id == $id) {
+                throw new ApiException('不可以修改自己的角色!');
+            }
+
+            foreach ($data['role_ids'] as $v) {
+                //判断是否存在
+                $is_role = \App\Model\AdminRoleModel::where('is_on', 1)
+                    ->select('id')
+                    ->find($v['role_id']);
+
+                if (!$is_role) {
+                    \DB::rollBack();
+                    throw new ApiException('管理员角色不存在!');
+                }
+            }
+
+            //先删除之前该用户所有角色
+            $is_delete = \App\Model\AdminUserRoleModel::where('admin_user_id', $id)
+                ->delete();
+
+            if (!$is_delete) {
+                \DB::rollBack();
+                throw new ApiException('数据库错误!');
+            }
+
+            foreach ($data['role_ids'] as $v) {
+                $admin_user_role_model = new \App\Model\AdminUserRoleModel();
+                set_save_data($admin_user_role_model, [
+                    'admin_user_id' => $id,
+                    'admin_role_id' => $v['role_id']
+                ]);
+                $save = $admin_user_role_model->save();
+                if (!$save) {
+                    \DB::rollBack();
+                    throw new ApiException('数据库错误!');
+                }
+            }
+
+            unset($data['role_ids']);
+        }
+
+        set_save_data($res, $data);
+        $update = $res->save();
+
+        if (!$update) {
+            \DB::rollBack();
+            throw new ApiException('数据库错误');
+        }
+        \DB::commit();
+
+        return true;
+    }
+
+    /**
+     * 删除管理员
+     * @param int $id 管理员ID
+     * @throws ApiException
+     */
+    public static function deleteAdminUser($id)
+    {
+        if ($id == 1) {
+            throw new ApiException('系统管理员不能被删除!');
+        }
+
+        $res = \App\Model\AdminUserModel::where('is_on', 1)
+            ->select('id')
+            ->find($id);
+
+        if (!$res) {
+            throw new ApiException('管理员不存在!');
+        }
+
+        \DB::beginTransaction();
+
+        set_save_data($res, [
+            'is_on' => 0
+        ]);
+        $update = $res->save();
+        if (!$update) {
+            \DB::rollBack();
+            throw new ApiException('数据库错误!');
+        }
+
+        //删除管理角色
+        $delete_role = \App\Model\AdminUserRoleModel::where('admin_user_id', $id)
+            ->delete();
+        if (!$delete_role) {
+            \DB::rollBack();
+            throw new ApiException('数据库错误!');
+        }
+
+        \DB::commit();
+
+        return true;
+    }
+
+    /**
+     * 修改自己的信息
+     * @param array $data 需要修改的数据
+     * @throws ApiException
+     */
+    public static function updateSelf($data)
+    {
+        $admin_id = \Jwt::get('admin_info.admin_id');
+
+        $res = \App\Model\AdminUserModel::where('is_on', 1)
+            ->select(['id', 'password', 'salt'])
+            ->find($admin_id);
+
+        if (!$res) {
+            throw new ApiException('管理员不存在!');
+        }
+
+        //修改密码
+        if (isset($data['password']) && isset($data['old_password'])) {
+            load_helper('Password');
+
+            //对比旧密码
+            if ($res->password != encrypt_password($data['old_password'], $res->salt)) {
+                throw new ApiException('旧密码错误!');
+            }
+
+            $get_password = create_password($data['password'], $salt);
+            $data['password'] = $get_password;
+            $data['salt'] = $salt;
+
+            unset($data['old_password']);
+        }
+
+        //改头像
+        if (isset($data['headimg'])) {
+            if (!empty($data['headimg'])) {
+                $path = \App\Model\UploadModel::where('is_on', 1)
+                    ->select('path')
+                    ->find($data['headimg']);
+
+                if (!$path) {
+                    throw new ApiException('图片不存在!');
+                }
+
+                $data['headimg'] = $path->path;
+            }
+        }
+
+        //判断手机
+        if (isset($data['phone']) && $data['phone'] == '') {
+            $data['phone'] = 0;
+        }
+
+        set_save_data($res, $data);
+        $update = $res->save();
+
+        if (!$update) {
+            throw new ApiException('数据库错误!');
+        }
+
+        return true;
+    }
+
+    /**
+     * 获取自己的信息
+     * @return \App\Model\AdminUserModel|\Illuminate\Database\Query\Builder|mixed|static
+     * @throws ApiException
+     */
+    public static function getSelf()
+    {
+        $admin_id = \Jwt::get('admin_info.admin_id');
+
+        $data = \App\Model\AdminUserModel::where('is_on', 1)
+            ->select(['id', 'account', 'name', 'phone', 'headimg', 'last_login_ip', 'last_login_time'])
+            ->find($admin_id);
+
+        if (!$data) {
+            throw new ApiException('管理员不存在!');
+        }
+
+        //转换ip
+        $data->last_login_ip = long2ip($data->last_login_ip);
+
+        //处理头像
+        load_helper('File');
+        $data->headimg = auto_url($data->headimg);
+
+        //查询角色
+        $role = $data->roles;
+        if (!$role) {
+            throw new ApiException('角色错误!');
+        }
+
+        //重装数据
+        $data_role = array();
+        $role->each(function ($item) use (&$data_role) {
+            $data_role[] = array(
+                'name' => $item->name,
+                'id' => $item->id
+            );
+        });
+
+        unset($data->roles);
+        $data->role = $data_role;
+
+        return $data;
+    }
+
+    /**
+     * 判断当前session状态
+     * @return array
+     */
+    public static function status()
+    {
+
+        $data = [
+            'is_user' => 0
+        ];
+
+        if (!empty(\Jwt::get('admin_info.admin_id'))) {
+            $data['is_user'] = 1;
+        }
+
+        return $data;
+    }
+}

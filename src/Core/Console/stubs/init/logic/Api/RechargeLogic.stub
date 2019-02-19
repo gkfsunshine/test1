@@ -1,0 +1,104 @@
+<?php
+namespace App\Logic\Api;
+
+use App\Exceptions\ApiException;
+
+class RechargeLogic
+{
+
+    /**
+     * 添加充值
+     * @param array $data 要添加的数据
+     * @return bool
+     * @throws ApiException
+     */
+    public static function addRecharge($data)
+    {
+        $return_params = [
+            'action' => 'recharge',
+            'user_id' => \Jwt::get('user_info.user_id')
+        ];
+
+        switch ($data['type']) {
+            case 'wechatpay' :
+                //微信充值
+                return self::addRechargeByWechatpay($data, $return_params);
+                break;
+            case 'alipay' :
+                //支付宝充值
+                $data['body'] = '余额充值';
+                $data['subject'] = '余额充值';
+                return \App\Logic\Pay\PayLogic::payByAlipay($data, $return_params);
+                break;
+            default :
+                throw new ApiException('支付类型错误!');
+        }
+    }
+
+    /**
+     * 充值余额逻辑
+     * @param array $data 数据
+     * @param int $amount 金额
+     * @param object $pay_model 支付类
+     * @param int $pay_method 支付方式:1,微信;2,支付宝;3,银联在线;4,易宝支付;',
+     * @return bool
+     * @throws ApiException
+     */
+    public static function recharge($user_id, $amount, $pay_model, $pay_method = 1)
+    {
+        //修改资金表
+        $user_capital = \App\Model\UserCapitalModel::where('user_id', $user_id)
+            ->first(['id', 'balance']);
+
+        if (!$user_capital) {
+            throw new ApiException('不存在用户!');
+        }
+
+        $old_balance = $user_capital->balance;
+
+        $add = \App\Model\UserCapitalModel::where('id', $user_capital->id)
+            ->update([
+                'balance' => \DB::raw('balance + ' . $amount),
+                'total_recharge' => \DB::raw('total_recharge + ' . $amount),
+            ]);
+        if (!$add) {
+            throw new ApiException('数据库错误!');
+        }
+
+        //记录余额日志表
+        \App\Logic\Api\UserCapitalLogic::addBalanceLog($user_id, 1, $pay_model->transaction_id, $old_balance,
+            $amount, 1, $pay_method, '', 0, $pay_model->out_trade_no);
+
+        return true;
+    }
+
+    /**
+     * 微信支付-充值余额
+     * @param $data
+     * @param $return_params
+     * @return array
+     * @throws ApiException
+     */
+    public static function addRechargeByWechatpay($data, $return_params)
+    {
+        $data['body'] = '余额充值';
+
+        if ($data['device'] == 'mp') {
+            //获取用户的open_id
+
+            $user_id = \Jwt::get('user_info.user_id');
+            $user = \App\Model\UserAuthOauthModel::select(['id1'])
+                ->where('user_id', $user_id)
+                ->first();
+            if (!$user) {
+                throw new ApiException('用户错误!');
+            }
+            $openid = $user->id1;
+        } else {
+            $openid = '';
+        }
+
+        return \App\Logic\Pay\PayLogic::payByWechatpay($data, $return_params, $openid);
+    }
+
+}

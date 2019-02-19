@@ -1,0 +1,433 @@
+<?php
+namespace App\Logic\Admin;
+
+use App\Exceptions\ApiException;
+
+class ArticleLogic
+{
+
+    /**
+     * 文章列表
+     * @param array $data 列表查询条件
+     *              $data.cat_id 分类id
+     *              $data.article_tag 标签id,逗号分隔
+     *              $data.title 标题
+     *              $data.is_show 是否显示
+     *              $data.author 作者
+     * @return \App\Model\ArticleModel|array|\Illuminate\Database\Query\Builder
+     */
+    public static function getArticleList($data)
+    {
+        $list = \App\Model\ArticleModel::select(['id', 'title', 'click_num', 'author', 'cover', 'cat_id', 'is_show', 'created_at', 'updated_at'])
+            ->where('is_on', 1)
+            ->with(['category' => function ($query) {
+                $query->where('is_on', 1)->select('id', 'name');
+            }])
+            ->with(['tags' => function ($query) use ($data) {
+                $query->where('is_on', 1)->select('name');
+            }])
+            ->orderBy('id','Desc');
+
+        //筛选tag
+        if (isset($data['article_tag'])) {
+            $tags = explode(',', $data['article_tag']);
+            $list->whereHas('tags', function ($query) use ($tags) {
+                $query->whereIn('tag_id', $tags);
+            });
+        }
+
+        //筛选分类
+        if (isset($data['cat_id'])) {
+            $list->where('cat_id', $data['cat_id']);
+        }
+
+        //筛选作者
+        if (isset($data['author'])) {
+            $list->where('author', $data['author']);
+        }
+
+        //筛选标题
+        if (isset($data['title'])) {
+            $list->where('title', 'like', '%' . $data['title'] . '%');
+        }
+
+        //筛选是否显示
+        if (isset($data['is_show'])) {
+            $list->where('is_show', $data['is_show']);
+        }
+
+        $list = $list->paginate(15);
+
+        load_helper('File');
+
+        //重装数据
+        $list->each(function ($item, $key) {
+            $item->tags_name = $item->tags->implode('name', ',');
+            $item->cat_name = $item->category->name;
+            $item->cover = auto_url($item->cover);
+            unset($item->tags);
+            unset($item->category);
+        });
+
+        return $list;
+    }
+
+    /**
+     * 获取文章详情
+     * @param int $id 文章ID
+     * @return \App\Model\ArticleModel|array|\Illuminate\Database\Query\Builder|null|\stdClass
+     * @throws ApiException
+     */
+    public static function getOneArticle($id)
+    {
+        $data = \App\Model\ArticleModel::where('is_on', '=', 1)
+            ->select(['id', 'title', 'author', 'cover', 'is_show', 'click_num', 'cat_id', 'content', 'created_at', 'updated_at'])
+            ->find($id);
+
+        if (!$data) {
+            throw new ApiException('文章不存在!');
+        }
+
+        $tags = $data->tags()->get(['article_tag.id', 'name']);
+        if (!$tags->isEmpty()) {
+            $tags->each(function ($item) {
+                unset($item->pivot);
+            });
+            $data->tag = $tags;
+        } else {
+            $data->tag = [];
+        }
+
+        //分类
+        $category = $data->category()->first(['article_category.id', 'name']);
+        if ($category) {
+            $data->cat_name = $category->name;
+        } else {
+            $data->cat_name = '';
+        }
+
+        load_helper('File');
+        $data->cover = auto_url($data->cover);
+
+        return $data;
+    }
+
+    /**
+     * 添加文章
+     * @param array $data 要添加的文章数据
+     * @return bool
+     * @throws ApiException
+     */
+    public static function addArticle($data)
+    {
+        //判断分类id
+        $is_cat = \App\Model\ArticleCategoryModel::where('is_on', 1)
+            ->select('id')
+            ->find($data['cat_id']);
+
+        if (!$is_cat) {
+            throw new ApiException('文章分类不存在!');
+        }
+
+        //判断文章标签
+        if (isset($data['tag_id'])) {
+            $tag_id = $data['tag_id'];
+            unset($data['tag_id']);
+        }
+
+        //判断封面
+        if (isset($data['cover_id'])) {
+            $is_cover = \App\Model\UploadModel::where('is_on', 1)
+                ->select('path')
+                ->find($data['cover_id']);
+
+            if (!$is_cover) {
+                throw new ApiException('封面图片不存在!');
+            }
+
+            unset($data['cover_id']);
+            $data['cover'] = $is_cover->path;
+        }
+
+        \DB::beginTransaction();
+        $article_model = new \App\Model\ArticleModel();
+        set_save_data($article_model, $data);
+        $res = $article_model->save();
+        if (!$res) {
+            \DB::rollBack();
+            throw new ApiException('添加文章失败!');
+        }
+
+        if (isset($tag_id)) {
+            foreach ($tag_id as $val) {
+                //判断是否存在
+                $is_tag = \App\Model\ArticleTagModel::where('is_on', 1)
+                    ->select('id')
+                    ->find($val['tag_id']);
+                if (!$is_tag) {
+                    \DB::rollBack();
+                    throw new ApiException('标签不存在!');
+                }
+
+                //tag表article_num加1
+                $add_num = $is_tag->increment('article_num', 1);
+                if (!$add_num) {
+                    \DB::rollBack();
+                    throw new ApiException('数据库错误!');
+                }
+
+                $article_tag_relations_model = new \App\Model\ArticleTagRelationsModel();
+                $article_tag_relations_data = array(
+                    'article_id' => $article_model->id,
+                    'tag_id' => $val['tag_id']
+                );
+                set_save_data($article_tag_relations_model, $article_tag_relations_data);
+                $res = $article_tag_relations_model->save();
+                if (!$res) {
+                    \DB::rollBack();
+                    throw new ApiException('添加失败');
+                }
+            }
+        }
+
+        //分类article_num加一
+        $add_num = $is_cat->increment('article_num', 1);
+        if (!$add_num) {
+            \DB::rollBack();
+            throw new ApiException('数据库错误!');
+        }
+
+        \DB::commit();
+        return true;
+    }
+
+    /**
+     * 修改文章信息
+     * @param array $data 修改的信息
+     * @param int $id 文章ID
+     * @return bool
+     * @throws ApiException
+     */
+    public static function updateArticle($data, $id)
+    {
+        //文章是否存在
+        $res = \App\Model\ArticleModel::where('is_on', '=', 1)
+            ->select(['id', 'cat_id'])
+            ->find($id);
+
+        if (!$res) {
+            throw new ApiException('文章不存在!');
+        }
+
+        //判断文章分类
+        if (isset($data['cat_id'])) {
+            if ($data['cat_id'] == $res->cat_id) {
+                throw new ApiException('文章分类不能改为与原来的的分类一样!');
+            }
+
+            //判断文章分类是否存在
+            $is_cat = \App\Model\ArticleCategoryModel::where('is_on', 1)
+                ->select('id')
+                ->find($data['cat_id']);
+
+            if (!$is_cat) {
+                throw new ApiException('文章分类不存在!');
+            }
+        }
+
+        //判断封面
+        if (isset($data['cover_id'])) {
+            $is_cover = \App\Model\UploadModel::where('is_on', 1)
+                ->select('path')
+                ->find($data['cover_id']);
+
+            if (!$is_cover) {
+                throw new ApiException('封面图片不存在!');
+            }
+
+            unset($data['cover_id']);
+            $data['cover'] = $is_cover->path;
+        }
+
+        //判断文章标签
+        if (isset($data['tag_id'])) {
+            $tag_id = $data['tag_id'];
+            unset($data['tag_id']);
+        }
+
+        \DB::beginTransaction();
+
+        //操作标签
+        if (isset($tag_id)) {
+            //处理一下现在传入的标签
+            $now_tag = [];
+            foreach ($tag_id as $v) {
+                $now_tag[$v['tag_id']] = $v['tag_id'];
+            }
+
+            //拿到之前所有的标签
+            $origin_tag = $res->tags->toArray();
+
+            foreach ($origin_tag as $v) {
+                if (array_key_exists($v['id'], $now_tag)) {
+                    //存在则在数组中删掉
+                    unset($now_tag[$v['id']]);
+
+                } else {
+                    //不存在则删除
+                    //文章数减1
+                    $tag = \App\Model\ArticleTagModel::find($v['id'])->decrement('article_num', 1);
+                    if (!$tag) {
+                        \DB::rollBack();
+                        throw new ApiException('数据库错误!');
+                    }
+
+                    //删掉关联表
+                    $delete = \App\Model\ArticleTagRelationsModel::where('article_id', $id)
+                        ->where('tag_id', $v['id'])
+                        ->delete();
+
+                    if (!$delete) {
+                        \DB::rollBack();
+                        throw new ApiException('数据库错误!');
+                    }
+
+                }
+            }
+
+            //还存在,则表示是多出来的,增加到数据库
+            if (count($now_tag) > 0) {
+                foreach ($now_tag as $v) {
+                    //判断是否存在标签
+                    $is_tag = \App\Model\ArticleTagModel::where('is_on', 1)
+                        ->select('id')
+                        ->find($v);
+
+                    if (!$is_tag) {
+                        \DB::rollBack();
+                        throw new ApiException('不存在标签!');
+                    }
+
+                    //标签文章数加1
+                    $update = $is_tag->increment('article_num', 1);
+                    if (!$update) {
+                        \DB::rollBack();
+                        throw new ApiException('数据库错误!');
+                    }
+
+                    //加到关联表
+                    $article_tag_relations_model = new \App\Model\ArticleTagRelationsModel();
+                    set_save_data($article_tag_relations_model, array(
+                        'article_id' => $id,
+                        'tag_id' => $v
+                    ));
+
+                    $save = $article_tag_relations_model->save();
+                    if (!$save) {
+                        \DB::rollBack();
+                        throw new ApiException('数据库错误!');
+                    }
+                }
+            }
+        }
+
+        //更新主表
+        set_save_data($res, $data);
+        $update = $res->save();
+        if (!$update) {
+            \DB::rollBack();
+            throw new ApiException('数据库错误!');
+        }
+
+        //操作分类
+        if (isset($data['cat_id'])) {
+            //当前分类加1
+            $update_cat = $is_cat->increment('article_num', 1);
+            if (!$update_cat) {
+                \DB::rollBack();
+                throw new ApiException('数据库错误!');
+            }
+
+            //以前的分类减1
+            $origin_cat = \App\Model\ArticleModel::select('id')->find($res->cat_id);
+            if ($origin_cat) {
+                $update_cat = $origin_cat->decrement('article_num', 1);
+                if (!$update_cat) {
+                    \DB::rollBack();
+                    throw new ApiException('数据库错误!');
+                }
+            }
+        }
+
+        \DB::commit();
+        return true;
+
+    }
+
+    /**
+     * 删除文章
+     * @param int $id 文章ID
+     * @return bool
+     * @throws ApiException
+     */
+    public static function deleteArticle($id)
+    {
+        $res = \App\Model\ArticleModel::where('is_on', '=', 1)
+            ->select(['id', 'cat_id'])
+            ->find($id);
+
+        if (!$res) {
+            throw new ApiException('文章不存在');
+        }
+
+        \DB::beginTransaction();
+
+        set_save_data($res, ['is_on' => 0]);
+        $update = $res->save();
+
+        if (!$update) {
+            \DB::rollBack();
+            throw new ApiException('数据库错误!');
+        }
+
+        //分类article_num减1
+        $is_cat = \App\Model\ArticleCategoryModel::find($res->cat_id);
+        if ($is_cat) {
+            $update_cat = $is_cat->decrement('article_num', 1);
+            if (!$update_cat) {
+                \DB::rollBack();
+                throw new ApiException('数据库错误!');
+            }
+        }
+
+        //删除标签关联
+        $tag = $res->tags;
+
+        if (!$tag->isEmpty()) {
+            $tags = $tag->map(function ($item) {
+                return $item->pivot->tag_id;
+            });
+
+            $update_num = \App\Model\ArticleTagModel::whereIn('id', $tags->toArray())
+                ->decrement('article_num', 1);
+
+            if (!$update_num) {
+                \DB::rollBack();
+                throw new ApiException('数据库错误!');
+            }
+
+            $updata_relation = \App\Model\ArticleTagRelationsModel::where('article_id', $id)
+                ->delete();
+
+            if (!$updata_relation) {
+                \DB::rollBack();
+                throw new ApiException('数据库错误!');
+            }
+        }
+
+        \DB::commit();
+
+        return true;
+    }
+
+}

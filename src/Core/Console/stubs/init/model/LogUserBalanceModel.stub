@@ -1,0 +1,95 @@
+<?php
+namespace App\Model;
+
+use Illuminate\Database\Eloquent\Model;
+
+
+/**
+ * Model LogUserBalanceModel
+ * 
+ * @property int $id
+ * @property int $user_id
+ * @property int $balance
+ * @property int $amount
+ * @property int $is_plus
+ * @property int $type
+ * @property int $transaction_id
+ * @property int $admin_id
+ * @property int $pay_method
+ * @property int $order_id
+ * @property string $remark
+ * @property string $out_trade_no
+ * @property int $is_enterprise
+ * @property int $created_at
+ * @property int $updated_at
+ * @property int $is_on
+ *
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogUserBalanceModel where($column, $operator = null, $value = null, $boolean = 'and')
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogUserBalanceModel whereIn($column, $values, $boolean = 'and', $not = false)
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogUserBalanceModel leftJoin($table, $first, $operator = null, $second = null)
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogUserBalanceModel rightJoin($table, $first, $operator = null, $second = null)
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogUserBalanceModel get($columns = ['*'])
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogUserBalanceModel paginate($perPage = 15, $columns = ['*'], $pageName = 'page', $page = null)
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogUserBalanceModel find($id, $columns = ['*'])
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogUserBalanceModel first($columns = ['*'])
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogUserBalanceModel select($columns = ['*'])
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogUserBalanceModel orderBy($column, $direction = 'asc') * @package App\Model
+ */
+class LogUserBalanceModel extends Model
+{
+    protected $table = 'log_user_balance';
+
+    //定义为毫秒时间戳
+    protected $dateFormat = 'Uv';
+
+    
+    //获取created_at字段时处理
+    public function getCreatedAtAttribute($value)
+    {
+        if(is_string($value)){
+            return (int)($value / 1000);
+        }
+
+        return $value;
+    }
+
+    //获取updated_at字段时处理
+    public function getUpdatedAtAttribute($value)
+    {
+        if(is_string($value)){
+            return (int)($value / 1000);
+        }
+
+        return $value;
+    }
+
+    //不需要记录created_at或updated_at
+    //protected $timestamps = false;
+
+    protected $casts = [
+        'id' => 'string',   //把id返回字符串
+    ];
+
+    /**
+     * 获取对应数据库链接对象
+     * @eg 用于分库分表时获取数据所在的数据库对象
+     * @param $id
+     * @return object
+     */
+    /*public static function getShardingConnection($id)
+    {
+        $mod = $id % 4;
+        $model = '\App\Model\Mysql2\User_'.$mod.'Model';
+
+        return new $model;
+    }*/
+
+    /**
+     * 获取用户信息
+     * @return object
+     */
+    public function user()
+    {
+        return $this->hasOne('App\Model\UserModel', 'id', 'user_id');
+    }
+}

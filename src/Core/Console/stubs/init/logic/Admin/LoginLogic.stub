@@ -1,0 +1,87 @@
+<?php
+namespace App\Logic\Admin;
+
+use App\Exceptions\ApiException;
+
+class LoginLogic
+{
+
+    /**
+     * 后台管理员登录
+     * @param  string $account 管理员帐号
+     * @param  string $password 登陆密码
+     * @return
+     */
+    public static function login($account, $password, $locked_verification_code = '')
+    {
+        $admin = \App\Model\AdminUserModel::where('account', $account)
+            ->where('is_on', '=', 1)
+            ->first(['id', 'account', 'password', 'salt', 'name', 'headimg']);
+
+        if (!$admin) {
+            throw new ApiException("用户不存在或密码错误!");
+        }
+
+        //判断是否需要验证码
+        $error_num = 0;
+        $lock_info = \Cache::get('login:admin:password:locked:' . md5($account));
+        if ($lock_info) {
+            $error_num = $lock_info['error_num'];
+            //判断是否够3次
+            if ($error_num >= 3 && empty($locked_verification_code)) {
+                throw new ApiException('多次输入密码错误,请填写图形验证码!', 'NEED_LOCKED_VERIFICATION_CODE');
+            } elseif ($error_num >= 3 && !empty($locked_verification_code)) {
+                //验证密码图形验证码
+                $result = \Captcha::checkCodeInfo('admin:account_check', $locked_verification_code);
+                if (!$result) {
+                    throw new ApiException('图形验证码错误!');
+                }
+            }
+        }
+
+        load_helper('Password');
+        $get_password = encrypt_password($password, $admin->salt);
+
+        if ($admin->password != $get_password) {
+            \Cache::put('login:admin:password:locked:' . md5($account), ['error_num' => $error_num + 1], 60);
+            throw new ApiException("用户不存在或密码错误!");
+        }
+
+        $role = [];
+        $role_info = $admin->roles()->get(['admin_role_id', 'name']);
+
+        if (!$role_info->isEmpty()) {
+            foreach ($role_info as $v) {
+                $role[] = $v->admin_role_id;
+            }
+        }
+
+        load_helper('Network');
+
+        //更新信息
+        set_save_data($admin, [
+            'last_login_ip' => get_client_ip(),
+            'last_login_time' => time()
+        ]);
+
+        $update = $admin->save();
+        if (!$update) {
+            throw new ApiException("登录失败,请稍后重试!");
+        }
+
+        \Cache::forget('login:admin:password:locked:' . md5($account));
+
+        \Jwt::set('admin_info', [
+            'admin_id' => $admin->id,
+            'role' => $role
+        ]);
+
+        load_helper('File');
+
+        return [
+            'nickname' => $admin->name,
+            'headimg' => auto_url($admin->headimg)
+        ];
+    }
+
+}

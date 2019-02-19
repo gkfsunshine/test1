@@ -1,0 +1,65 @@
+<?php
+namespace App\Http\Controllers\Api;
+
+use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+
+class RechargeController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function index()
+    {
+        $this->verify([
+            'transaction_id' => 'no_required',
+            'start_time' => 'num|no_required',
+            'end_time' => 'num|no_required'
+        ], 'GET');
+        $this->verifyData['type'] = 1;
+        $list = \App\Logic\Api\LogUserBalanceLogic::getLogUserBalanceList($this->verifyData);
+        return $this->responseList($list);
+    }
+
+    /**
+     * 充值支付前转换
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
+    {
+        return $this->response();
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(Request $request)
+    {
+        //
+        $this->verify([
+            'type' => 'in:wechatpay:alipay',
+            'device' => 'in:web:h5:app:mp',
+            'amount' => 'egnum',
+            'callback' => 'no_required'
+        ], 'POST');
+        $data = $this->verifyData;
+
+        $url = \App\Logic\Api\RechargeLogic::addRecharge($data);
+
+        if (is_object($url)) {
+            return $url;
+        } elseif (is_string($url)) {
+            echo $url;
+        } elseif (is_array($url)) {
+            return $this->response($url);
+        } else {
+            return $this->response(['url' => $url]);
+        }
+    }
+}

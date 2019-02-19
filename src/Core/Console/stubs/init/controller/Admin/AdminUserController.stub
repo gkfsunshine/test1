@@ -1,0 +1,123 @@
+<?php
+namespace App\Http\Controllers\Admin;
+
+use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+
+class AdminUserController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function index()
+    {
+        $this->verify([
+            'name' => 'no_required',
+            'phone'=>'no_required|mobile',
+            'start_time' => 'no_required|timestamp',
+            'end_time' => 'no_required|timestamp',
+        ], 'GET');
+        $list = \App\Logic\Admin\AdminUserLogic::getAdminUserList($this->verifyData);
+
+        return $this->responseList($list);
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
+    {
+        //
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(Request $request)
+    {
+        $this->verify([
+            'account' => '',
+            'password' => '',
+            'name' => '',
+            'phone' => 'no_required|mobile',
+            'headimg' => 'no_required|egnum|can_null',
+            'role_ids.*.role_id' => 'egnum'
+        ], 'POST');
+
+        \App\Logic\Admin\AdminUserLogic::addAdminUser($this->verifyData);
+
+        return $this->response();
+    }
+
+    /**
+     * Display the specified resource.
+     *
+     * @param  int $id
+     * @return \Illuminate\Http\Response
+     */
+    public function show($id)
+    {
+        $this->verifyId($id);
+
+        $data = \App\Logic\Admin\AdminUserLogic::getOneAdminUser($id);
+
+        return $this->response($data);
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  int $id
+     * @return \Illuminate\Http\Response
+     */
+    public function edit($id)
+    {
+        $this->verifyId($id);
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request $request
+     * @param  int $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function update(Request $request, $id)
+    {
+        $this->verifyId($id);
+        $this->verify([
+            'account' => 'no_required',
+            'password' => 'no_required',
+            'name' => 'no_required',
+            'phone' => 'no_required|mobile|can_null',
+            'headimg' => 'no_required|egnum|can_null',
+            'role_ids.*.role_id' => 'no_required|egnum'
+        ], 'POST');
+
+        \App\Logic\Admin\AdminUserLogic::updateAdminUser($this->verifyData, $id);
+
+        return $this->response();
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  int $id
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy($id)
+    {
+        $this->verifyId($id);
+
+        \App\Logic\Admin\AdminUserLogic::deleteAdminUser($id);
+
+        return $this->response();
+    }
+}

@@ -1,0 +1,107 @@
+<?php
+namespace App\Model;
+
+use Illuminate\Database\Eloquent\Model;
+
+
+/**
+ * Model LogAlipayNotifyModel
+ * 
+ * @property int $id
+ * @property string $app_id
+ * @property string $out_trade_no
+ * @property string $trade_no
+ * @property string $trade_status
+ * @property string $out_biz_no
+ * @property float $invoice_amount
+ * @property float $receipt_amount
+ * @property float $total_amount
+ * @property float $buyer_pay_amount
+ * @property float $point_amount
+ * @property string $buyer_id
+ * @property float $refund_fee
+ * @property string $subject
+ * @property string $body
+ * @property string $sign_type
+ * @property string $auth_app_id
+ * @property string $charset
+ * @property string $notify_time
+ * @property string $notify_type
+ * @property string $notify_id
+ * @property string $gmt_create
+ * @property string $gmt_payment
+ * @property string $gmt_refund
+ * @property string $gmt_close
+ * @property string $version
+ * @property string $sign
+ * @property string $fund_bill_list
+ * @property string $voucher_detail_list
+ * @property string $seller_id
+ * @property string $passback_params
+ * @property string $raw_data
+ * @property int $deal_status
+ * @property string $error_msg
+ * @property int $created_at
+ * @property int $updated_at
+ *
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogAlipayNotifyModel where($column, $operator = null, $value = null, $boolean = 'and')
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogAlipayNotifyModel whereIn($column, $values, $boolean = 'and', $not = false)
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogAlipayNotifyModel leftJoin($table, $first, $operator = null, $second = null)
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogAlipayNotifyModel rightJoin($table, $first, $operator = null, $second = null)
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogAlipayNotifyModel get($columns = ['*'])
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogAlipayNotifyModel paginate($perPage = 15, $columns = ['*'], $pageName = 'page', $page = null)
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogAlipayNotifyModel find($id, $columns = ['*'])
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogAlipayNotifyModel first($columns = ['*'])
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogAlipayNotifyModel select($columns = ['*'])
+ * @method static \Illuminate\Database\Query\Builder | \App\Model\LogAlipayNotifyModel orderBy($column, $direction = 'asc') * @package App\Model
+ */
+class LogAlipayNotifyModel extends Model
+{
+    protected $table = 'log_alipay_notify';
+
+    //定义为毫秒时间戳
+    protected $dateFormat = 'Uv';
+
+
+    //获取created_at字段时处理
+    public function getCreatedAtAttribute($value)
+    {
+        if(is_string($value)){
+            return (int)($value / 1000);
+        }
+
+        return $value;
+    }
+
+    //获取updated_at字段时处理
+    public function getUpdatedAtAttribute($value)
+    {
+        if(is_string($value)){
+            return (int)($value / 1000);
+        }
+
+        return $value;
+    }
+
+    //不需要记录created_at或updated_at
+    //protected $timestamps = false;
+
+    protected $casts = [
+        'id' => 'string',   //把id返回字符串
+    ];
+
+    /**
+     * 获取对应数据库链接对象
+     * @eg 用于分库分表时获取数据所在的数据库对象
+     * @param $id
+     * @return object
+     */
+    /*public static function getShardingConnection($id)
+    {
+        $mod = $id % 4;
+        $model = '\App\Model\Mysql2\User_'.$mod.'Model';
+
+        return new $model;
+    }*/
+
+}

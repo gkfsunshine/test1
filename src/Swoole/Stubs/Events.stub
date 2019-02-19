@@ -1,0 +1,70 @@
+<?php
+
+namespace App\Socket;
+
+use JiaLeo\Swoole\Lib\Message;
+use JiaLeo\Swoole\Lib\Worker;
+
+class Events
+{
+
+    /**
+     * 当客户端连接时触发
+     * 如果业务不需此回调可以删除onConnect
+     *
+     * @param object $connection 连接对象
+     * @param int $client_id 连接id
+     */
+    public static function onConnect($connection, $client_id)
+    {
+        //var_dump($connection, $client_id);
+    }
+
+    /**
+     * 当客户端发来消息时触发
+     *
+     * @param object $connection 连接对象
+     * @param int $client_id 连接id
+     * @param mixed $message 具体消息
+     */
+    public static function onMessage($connection, $from_client_id, $message)
+    {
+
+        //格式化数据
+        $data = Message::formatGetData($message);
+        if (!$data) {
+            return;
+        }
+
+        //检验登录
+        $uid = \App\Logic\SocketLogic::checkLogin($data, $from_client_id);
+        if (!$uid) {
+            return;
+        }
+
+        switch ($data['type']) {
+            case 'init':
+                //初始化 -- 返回client_id,用户前台登录,亦可以自己更换
+                $reply = array(
+                    'client_id' => $from_client_id
+                );
+                $msg = Message::formatSendData($reply, 'reply_init', 'success');
+                Worker::sendToClient($from_client_id, $msg);
+                break;
+        }
+
+        // TODO
+
+    }
+
+    /**
+     * 当用户断开连接时触发
+     *
+     * @param object $connection 连接对象
+     * @param int $client_id 连接id
+     */
+    public static function onClose($connection, $client_id)
+    {
+        //var_dump($connection, $client_id);
+    }
+}
